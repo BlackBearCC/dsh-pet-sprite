@@ -1,0 +1,7 @@
+# Bundle layer: mounts the dsh-pet plugin row. The node half is a no-op
+# apply (it only exists so the plugin appears in the host Loader); the
+# browser half arrives via exports["./client"] + the dsh.client manifest
+# and registers into the shell.overlay slot.
+- insert:
+    - id: chat-pet
+      name: dsh-pet

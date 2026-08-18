@@ -1,0 +1,52 @@
+{
+  "name": "dsh-pet",
+  "version": "0.1.0",
+  "description": "A playable pixel companion for the DeepSeek Harness Web UI: platform-jumps over chat messages, WASD controllable, with a full nurture system (mood/power/health, levels, shop, inventory) fed by your agent's real token usage.",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "prepare": "tsdown || echo 'build skipped: tsdown not available (lib/ is committed)'",
+    "dev": "tsdown --watch"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0",
+    "tsdown": "^0.12.8",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}
