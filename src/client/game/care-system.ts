@@ -26,7 +26,7 @@ export const PLAY_ACTIONS: PlayAction[] = [
 
 // ─── System ───
 
-// SLEEP 速率(每秒)
+// SLEEP rate (per second)
 const SLEEP_MOOD_PER_SEC = 1.0;
 const SLEEP_POWER_PER_SEC = 0.1;
 
@@ -113,9 +113,9 @@ export class CareSystem {
   }
 
   /**
-   * SLEEP 重设计:用电力换心情。
-   * 客户端 behavior_system 追踪 duration,唤醒时一次性调用此方法批量应用。
-   * 见 docs/design/2026-07-20-sleep-重设计-design.md
+   * SLEEP redesign: trade power for mood.
+   * The client behavior_system tracks duration and calls this once on wake to apply in batch.
+   * See docs/design/2026-07-20-sleep-重设计-design.md
    */
   rest(params?: { duration?: number; wokeBy?: string }): {
     ok: boolean;
@@ -132,8 +132,8 @@ export class CareSystem {
     }
     const wokeBy = typeof params?.wokeBy === "string" ? params.wokeBy : "manual";
     const moodGain = Math.round(duration * SLEEP_MOOD_PER_SEC);
-    const powerCost = Math.round(duration * SLEEP_POWER_PER_SEC * 10) / 10; // 保留 1 位小数
-    // -0 → 0,避免 Object.is(-0, 0) 在测试中误判
+    const powerCost = Math.round(duration * SLEEP_POWER_PER_SEC * 10) / 10; // keep 1 decimal place
+    // -0 → 0, avoids Object.is(-0, 0) false negatives in tests
     const effects: Record<string, number> = { mood: moodGain, power: -powerCost || 0 };
     this._applyEffects(effects);
     this._bus.emit("care:action", {
@@ -165,7 +165,7 @@ export class CareSystem {
     return { ok: true, effects: result.effects };
   }
 
-  /** 照顾经验 = 道具效果总量 × 5(保底 100): 内容越强(效果越大)给得越多。 */
+  /** Care XP = total item effect × 5 (min 100): stronger content yields more XP. */
   private _careExp(effects: Record<string, number>): number {
     let sum = 0;
     for (const v of Object.values(effects)) {

@@ -1,9 +1,9 @@
 /**
- * Sticker definitions — 贴纸目录表
+ * Sticker definitions — sticker catalog
  *
- * 贴纸是可收集的装饰品, 贴在技能卡上提供视觉标识。
- * emoji 零成本渲染, 未来可升级为 Texture2D。
- * 复用 inventory (category="sticker") + shop 系统存储和出售。
+ * Stickers are collectible decorations attached to skill cards as visual markers.
+ * Emoji renders at zero cost; can be upgraded to Texture2D later.
+ * Reuses the inventory (category="sticker") + shop systems for storage and sale.
  */
 
 export type StickerRarity = "common" | "rare" | "epic" | "legendary";
@@ -21,7 +21,7 @@ export interface StickerDef {
   unlockLevel?: number;
 }
 
-/** 稀有度 → 边框色 (对应 BookT token, Godot 侧映射) */
+/** Rarity → border color (maps to BookT tokens, on the Godot side) */
 export const RARITY_COLORS: Record<StickerRarity, string> = {
   common: "INK_FAINT",
   rare: "MG_BLUE",
@@ -29,7 +29,7 @@ export const RARITY_COLORS: Record<StickerRarity, string> = {
   legendary: "MG_RED",
 };
 
-/** 默认贴纸 (角色创建时 grant) */
+/** Default stickers (granted at character creation) */
 export const DEFAULT_STICKER_IDS = [
   "sticker_default_star",
   "sticker_default_heart",
@@ -37,7 +37,7 @@ export const DEFAULT_STICKER_IDS = [
 ];
 
 export const STICKER_CATALOG: StickerDef[] = [
-  // ── 默认贴纸 (source=default, 角色创建即拥有) ──
+  // ── Default stickers (source=default, owned at character creation) ──
   {
     id: "sticker_default_star",
     name: "小星星",
@@ -66,7 +66,7 @@ export const STICKER_CATALOG: StickerDef[] = [
     source: "default",
   },
 
-  // ── 技术域 ──
+  // ── Tech domain ──
   {
     id: "sticker_tech_bug",
     name: "小虫子",
@@ -101,7 +101,7 @@ export const STICKER_CATALOG: StickerDef[] = [
     unlockLevel: 8,
   },
 
-  // ── 创作域 ──
+  // ── Creative domain ──
   {
     id: "sticker_art_brush",
     name: "画笔",
@@ -136,7 +136,7 @@ export const STICKER_CATALOG: StickerDef[] = [
     unlockLevel: 15,
   },
 
-  // ── 办公域 ──
+  // ── Office domain ──
   {
     id: "sticker_office_clip",
     name: "回形针",
@@ -160,7 +160,7 @@ export const STICKER_CATALOG: StickerDef[] = [
     unlockLevel: 3,
   },
 
-  // ── 探索域 ──
+  // ── Exploration domain ──
   {
     id: "sticker_explore_compass",
     name: "指南针",
@@ -195,7 +195,7 @@ export const STICKER_CATALOG: StickerDef[] = [
     unlockLevel: 18,
   },
 
-  // ── 生活域 ──
+  // ── Life domain ──
   {
     id: "sticker_life_sun",
     name: "小太阳",
@@ -219,7 +219,7 @@ export const STICKER_CATALOG: StickerDef[] = [
     unlockLevel: 3,
   },
 
-  // ── 社交域 ──
+  // ── Social domain ──
   {
     id: "sticker_social_handshake",
     name: "握手",
@@ -243,7 +243,7 @@ export const STICKER_CATALOG: StickerDef[] = [
     unlockLevel: 5,
   },
 
-  // ── 情感域 ──
+  // ── Emotion domain ──
   {
     id: "sticker_emotion_rainbow",
     name: "彩虹",
@@ -267,7 +267,7 @@ export const STICKER_CATALOG: StickerDef[] = [
     unlockLevel: 10,
   },
 
-  // ── 娱乐域 ──
+  // ── Fun domain ──
   {
     id: "sticker_fun_dice",
     name: "骰子",
@@ -291,7 +291,7 @@ export const STICKER_CATALOG: StickerDef[] = [
     unlockLevel: 3,
   },
 
-  // ── 通用 / 冒险奖励 ──
+  // ── Generic / adventure rewards ──
   {
     id: "sticker_adventure_key",
     name: "金钥匙",
@@ -320,12 +320,12 @@ export function getStickerById(id: string): StickerDef | undefined {
   return STICKER_MAP[id];
 }
 
-/** 商城出售的贴纸 (source=shop) */
+/** Stickers sold in the shop (source=shop) */
 export function getShopStickers(): StickerDef[] {
   return STICKER_CATALOG.filter((s) => s.source === "shop");
 }
 
-/** 默认贴纸 (source=default) */
+/** Default stickers (source=default) */
 export function getDefaultStickers(): StickerDef[] {
   return STICKER_CATALOG.filter((s) => s.source === "default");
 }

@@ -51,7 +51,7 @@ export interface InventorySlot {
 // ─── Item Definitions ───
 
 export const ITEM_DEFS: Record<string, ItemDef> = {
-  // ─── Lv.1 · 单属性为主，解决基本需求 ───
+  // ─── Lv.1 · single-attribute basics ───
   巴别鱼罐头: {
     id: "巴别鱼罐头",
     name: "巴别鱼罐头",
@@ -85,7 +85,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
     tier: 1,
   },
 
-  // ─── Lv.3 · 仍然单属性，但效果略强或有侧重 ───
+  // ─── Lv.3 · still single-attribute, slightly stronger or more focused ───
   宇宙棉花糖: {
     id: "宇宙棉花糖",
     name: "宇宙棉花糖",
@@ -106,7 +106,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
     effects: { power: 35 },
     tier: 1,
   },
-  // ─── Lv.5 · 开始出现双属性，但有代价或主次分明 ───
+  // ─── Lv.5 · dual attributes appear, with trade-offs or clear primary/secondary ───
   毛巾: {
     id: "毛巾",
     name: "毛巾",
@@ -129,7 +129,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
     tier: 2,
   },
 
-  // ─── Lv.8 · 双属性，有明确主副 ───
+  // ─── Lv.8 · dual attributes with clear primary/secondary ───
   心灵感应茶: {
     id: "心灵感应茶",
     name: "心灵感应茶",
@@ -151,7 +151,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
     tier: 2,
   },
 
-  // ─── Lv.10 · 双属性，数值开始强力 ───
+  // ─── Lv.10 · dual attributes, values getting strong ───
   福特的三明治: {
     id: "福特的三明治",
     name: "福特的三明治",
@@ -176,7 +176,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
     adventureEffect: { type: "reroll", value: 1 },
   },
 
-  // ─── Lv.14 · 双属性强力 + 开始出现特殊效果 ───
+  // ─── Lv.14 · strong dual attributes + special effects appear ───
   泛银河爆破饮: {
     id: "泛银河爆破饮",
     name: "泛银河爆破饮",
@@ -212,7 +212,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
     adventureEffect: { type: "reroll", value: 1 },
   },
 
-  // ─── Lv.18 · 三属性，真正的好东西 ───
+  // ─── Lv.18 · triple attributes, the real good stuff ───
   深思重启针: {
     id: "深思重启针",
     name: "深思重启针",
@@ -235,7 +235,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
     adventureEffect: { type: "roll_bonus", value: 3 },
   },
 
-  // ─── Lv.22 · 全属性 + 特殊效果 ───
+  // ─── Lv.22 · all attributes + special effects ───
   生命宇宙万物答案: {
     id: "生命宇宙万物答案",
     name: "生命宇宙万物答案",
@@ -260,7 +260,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
     metadata: { triggerAdventure: true },
   },
 
-  // ─── Lv.26 · 全属性 + 强特殊效果 ───
+  // ─── Lv.26 · all attributes + strong special effects ───
   金心号舱票: {
     id: "金心号舱票",
     name: "金心号舱票",
@@ -273,7 +273,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
     metadata: { resetAllCooldowns: true },
   },
 
-  // ─── Lv.30 · 终极道具 ───
+  // ─── Lv.30 · ultimate items ───
   上帝的最后留言: {
     id: "上帝的最后留言",
     name: "上帝的最后留言",
@@ -624,12 +624,12 @@ export class InventorySystem {
       }
     }
 
-    // ─── 特殊效果处理 ───
+    // ─── Special effect handling ───
     const meta = def.metadata;
     const special: Record<string, unknown> = {};
 
     if (meta) {
-      // 冷却缩减（时间漩涡甜甜圈）
+      // Cooldown reduction (Time Vortex Donut)
       if (typeof meta.cooldownReduction === "number") {
         const reduction = meta.cooldownReduction;
         for (const [slotId, slot] of this._slots.entries()) {
@@ -639,7 +639,7 @@ export class InventorySystem {
               const elapsed = Date.now() - slot.lastUsedAt;
               const remaining = slotDef.cooldownMs - elapsed;
               if (remaining > 0) {
-                // 把 lastUsedAt 往前推，等效于缩短剩余冷却
+                // Push lastUsedAt backward, effectively shortening the remaining cooldown
                 slot.lastUsedAt -= Math.floor(remaining * reduction);
               }
             }
@@ -648,7 +648,7 @@ export class InventorySystem {
         special.cooldownReduction = reduction;
       }
 
-      // 冷却全部重置（金心号舱票）
+      // Reset all cooldowns (Heart of Gold ticket)
       if (meta.resetAllCooldowns) {
         for (const slot of this._slots.values()) {
           slot.lastUsedAt = undefined;
@@ -656,18 +656,18 @@ export class InventorySystem {
         special.resetAllCooldowns = true;
       }
 
-      // 经验加成（生命宇宙万物答案）
+      // EXP boost (Answer to Life, the Universe and Everything)
       if (typeof meta.expBoost === "number") {
         special.expBoost = meta.expBoost;
         special.expBoostUntil = Date.now() + ((meta.expBoostDurationMs as number) ?? 7200000);
       }
 
-      // 触发探险（马格拉斯定制星球）
+      // Trigger adventure (Magrathea custom planet)
       if (meta.triggerAdventure) {
         special.triggerAdventure = true;
       }
 
-      // 隐藏人格（上帝的最后留言）
+      // Hidden persona (God's Final Message)
       if (meta.hiddenPersona) {
         special.hiddenPersona = true;
         special.hiddenPersonaUntil =

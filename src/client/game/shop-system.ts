@@ -1,7 +1,7 @@
 /**
  * Character Engine — ShopSystem
  *
- * Manages the star-coin (星币) wallet and in-game shop.
+ * Manages the star-coin wallet and in-game shop.
  * Coins are earned through gameplay only (tasks, login, level-up, achievements).
  * Shop items have daily/weekly purchase limits.
  *
@@ -50,27 +50,27 @@ export interface BuyResult {
 // ─── Shop catalog (from design doc §9.2) ───
 
 export const SHOP_CATALOG: ShopItemDef[] = [
-  // ── Lv.1 · 单属性基础款 ──
+  // ── Lv.1 · single-attribute basics ──
   { id: "巴别鱼罐头", price: 20, dailyLimit: 5 },
   { id: "不要恐慌胶囊", price: 15, dailyLimit: 5 },
   { id: "马文牌退烧贴", price: 25, dailyLimit: 3 },
-  // ── Lv.3 · 单属性变体 ──
+  // ── Lv.3 · single-attribute variants ──
   { id: "宇宙棉花糖", price: 12, dailyLimit: 10, unlockLevel: 3 },
   { id: "星际薯条", price: 15, dailyLimit: 8, unlockLevel: 3 },
-  // ── Lv.5 · 开始双属性（有代价） ──
+  // ── Lv.5 · dual attributes begin (with trade-offs) ──
   { id: "毛巾", price: 40, dailyLimit: 3, unlockLevel: 5 },
   { id: "假装正常药水", price: 30, dailyLimit: 3, unlockLevel: 5 },
-  // ── Lv.8 · 双属性主副 ──
+  // ── Lv.8 · dual attributes, primary/secondary ──
   { id: "心灵感应茶", price: 45, dailyLimit: 3, unlockLevel: 8 },
   { id: "猫薄荷星云", price: 40, dailyLimit: 3, unlockLevel: 8 },
-  // ── Lv.10 · 双属性强力 ──
+  // ── Lv.10 · strong dual attributes ──
   { id: "福特的三明治", price: 60, dailyLimit: 2, unlockLevel: 10 },
   { id: "概率修复喷雾", price: 55, dailyLimit: 2, unlockLevel: 10 },
-  // ── Lv.14 · 双属性 + 特殊效果登场 ──
+  // ── Lv.14 · dual attributes + special effects arrive ──
   { id: "泛银河爆破饮", price: 80, dailyLimit: 2, unlockLevel: 14 },
   { id: "沃贡诗集护盾", price: 75, dailyLimit: 2, unlockLevel: 14 },
   { id: "时间漩涡甜甜圈", price: 90, dailyLimit: 2, unlockLevel: 14 },
-  // ── Lv.18 · 三属性 / 强力单属性 ──
+  // ── Lv.18 · triple attributes / strong single attribute ──
   {
     id: "深思重启针",
     price: 150,
@@ -79,7 +79,7 @@ export const SHOP_CATALOG: ShopItemDef[] = [
     unlockLevel: 18,
   },
   { id: "无限非概率燃料", price: 120, dailyLimit: 1, unlockLevel: 18 },
-  // ── Lv.22 · 全属性 + 特殊效果 ──
+  // ── Lv.22 · all attributes + special effects ──
   {
     id: "生命宇宙万物答案",
     price: 250,
@@ -93,7 +93,7 @@ export const SHOP_CATALOG: ShopItemDef[] = [
     weeklyLimit: 1,
     unlockLevel: 22,
   },
-  // ── Lv.26 · 全属性 + 强特殊效果 ──
+  // ── Lv.26 · all attributes + strong special effects ──
   {
     id: "金心号舱票",
     price: 450,
@@ -101,7 +101,7 @@ export const SHOP_CATALOG: ShopItemDef[] = [
     weeklyLimit: 1,
     unlockLevel: 26,
   },
-  // ── Lv.30 · 终极 ──
+  // ── Lv.30 · ultimate ──
   {
     id: "上帝的最后留言",
     price: 800,

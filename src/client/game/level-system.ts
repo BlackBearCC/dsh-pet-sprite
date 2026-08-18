@@ -15,9 +15,9 @@ import type { EventBus } from "./event-bus.ts";
 export const MAX_LEVEL = 100;
 
 /**
- * 到达 `level` 级所需的累计经验(公式, 满级 Lv.100)。
- * 二次曲线 cumExp(L) = 2500 × (L-1)^2, 配合 token=1:1 的经济。
- * Lv2=2500, Lv10≈20万, Lv23≈121万, Lv30≈210万, Lv100≈2450万(满级)。
+ * Cumulative EXP required to reach `level` (formula, max Lv.100).
+ * Quadratic curve cumExp(L) = 2500 × (L-1)^2, paired with a token=1:1 economy.
+ * Lv2=2500, Lv10≈200k, Lv23≈1.21M, Lv30≈2.1M, Lv100≈24.5M (max level).
  */
 export function expForLevel(level: number): number {
   const n = Math.max(0, level - 1);
@@ -161,7 +161,7 @@ export class LevelSystem {
     return 20;
   }
 
-  /** Max offline decay window: 8h for all (慢速离线衰减, 约 8h 扣总量 1/5) */
+  /** Max offline decay window: 8h for all (slow offline decay, ~1/5 of total over 8h) */
   get maxOfflineHours(): number {
     return 8;
   }

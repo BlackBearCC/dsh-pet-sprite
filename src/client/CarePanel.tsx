@@ -1,4 +1,4 @@
-// Care panel for Pet — the养成 UI migrated from PetClaw's care chapter.
+// Care panel for Pet — the pet-raising UI migrated from PetClaw's care chapter.
 // Right-click the pet to open near the character. Tabbed layout:
 // status+interactions / inventory / shop. Fixed light palette so it reads
 // the same under any DSH theme.

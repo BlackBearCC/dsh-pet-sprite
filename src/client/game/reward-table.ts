@@ -33,7 +33,7 @@ type Ctx = Record<string, unknown>;
 
 type Resolver = (ctx: Ctx) => RewardDelta;
 
-// 经验整体放大后的强度(exp ×100; coins 不动)。
+// Intensity after global EXP inflation (exp ×100; coins untouched).
 const CHAT_EVAL_INTENTS: Record<string, RewardDelta> = {
   praise: { coins: 0, exp: 500 },
   deep_talk: { coins: 0, exp: 500 },
@@ -46,7 +46,7 @@ const CHAT_EVAL_INTENTS: Record<string, RewardDelta> = {
   angry: { coins: 0, exp: 0 },
 };
 
-/** 学习课程难度 1-5(来自事件 ctx.complexity), 学习经验按难度给。 */
+/** Course difficulty 1-5 (from event ctx.complexity); learning EXP scales with difficulty. */
 const learnComplexity = (ctx: Ctx): number =>
   Math.min(5, Math.max(1, Math.round(Number(ctx.complexity ?? 1))));
 
@@ -79,7 +79,7 @@ export const REWARD_TABLE: Record<RewardEventKey, Resolver> = {
 
   "chat:interval": () => ({ coins: 5, exp: 0 }),
 
-  // 学习多给, 且按课程难度 complexity(1-5)给: 难课远多于水课。
+  // Learning pays more, scaled by course complexity (1-5): hard courses far outweigh easy ones.
   "learn:lesson-complete": (ctx) => ({ coins: 8, exp: learnComplexity(ctx) * 300 }),
 
   "learn:exam-passed": (ctx) => ({ coins: 40, exp: learnComplexity(ctx) * 2000 }),

@@ -42,13 +42,13 @@ export type CharacterEventMap = {
     action: string;
     itemId?: string;
     effects: Record<string, number>;
-    /** SLEEP 专属:睡眠时长(秒) */
+    /** SLEEP only: sleep duration (seconds) */
     duration?: number;
-    /** SLEEP 专属:唤醒原因 "natural" | "hungry" | "click" | "manual" */
+    /** SLEEP only: wake reason "natural" | "hungry" | "click" | "manual" */
     wokeBy?: string;
-    /** SLEEP 专属:本次 mood 增量 */
+    /** SLEEP only: mood delta for this sleep */
     moodGain?: number;
-    /** SLEEP 专属:本次 power 消耗 */
+    /** SLEEP only: power cost for this sleep */
     powerCost?: number;
   };
   /** Login streak updated */
@@ -159,7 +159,7 @@ export type CharacterEventMap = {
   "narrative:abandoned": { session: { id: string } };
   /** Triggered after narrative:completed; consumers should generate the NarrativeBook + memory triples. */
   "narrative:post-process": { sessionId: string };
-  /** Narrative book created (post-process LLM run wrote a 叙事书 into inventory) */
+  /** Narrative book created (post-process LLM run wrote a narrative book into inventory) */
   "narrative:book-created": {
     book: {
       id: string;
@@ -242,7 +242,7 @@ export type CharacterEventMap = {
     categoryName: string;
     complexity?: number;
   };
-  /** 选修课修完一轮(无考试,可反复修) */
+  /** Elective course finished one round (no exam, can be retaken) */
   "learn:elective-completed": {
     courseId: string;
     courseTitle: string;
@@ -250,9 +250,9 @@ export type CharacterEventMap = {
     subjectId?: string;
     timesCompleted: number;
   };
-  /** PetClaw 工具首次被调用（游戏层首次登记） */
+  /** PetClaw tool invoked for the first time (first registered by the game layer) */
   "tool:first_use": { toolName: string; source: string; timestamp: number };
-  /** RewardEngine 已把一条事件翻译成资源增量并派发完毕 */
+  /** RewardEngine translated an event into resource deltas and finished dispatching */
   "reward:issued": {
     eventType: string;
     coins: number;
@@ -267,13 +267,13 @@ export type CharacterEventMap = {
     attempts: number;
     complexity?: number;
   };
-  /** 观察模式: 用户自己在终端里用 agent CLI 开工了(只有元数据, 无内容原文) */
+  /** Observe mode: user started working with the agent CLI in their terminal (metadata only, no content) */
   "observed:work-begin": { source: string; project: string; cwd?: string };
-  /** 观察模式: 观察到一次工具活动(target 只给文件 basename 或命令首词) */
+  /** Observe mode: a tool activity was observed (target is file basename or first word of the command) */
   "observed:activity": { source: string; tool: string; target?: string };
-  /** 观察模式: 会话安静了一阵(等输入/空闲) */
+  /** Observe mode: session went quiet for a while (waiting for input / idle) */
   "observed:work-pause": { source: string };
-  /** 观察模式: 会话结束 */
+  /** Observe mode: session ended */
   "observed:work-end": { source: string; ok?: boolean };
 };
 
