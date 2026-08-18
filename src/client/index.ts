@@ -12,8 +12,8 @@ export function apply(ctx: Context): void {
     return slots.register(
       {
         name: 'shell.overlay',
-        id: 'dsh-chat-pet',
-        registrant: 'dsh-chat-pet',
+        id: 'dsh-pet',
+        registrant: 'dsh-pet',
       },
       ChatPet,
     )
