@@ -23,6 +23,23 @@ type PetMode = 'idle' | 'work'
 
 interface Platform { x1: number; x2: number; y: number }
 
+// ── chat bubble lines (short, ≤ 14 chars keeps the bubble compact) ───────────
+const CHAT_LINES = {
+  idle: [
+    '今天的代码顺利吗?', '站得有点久了……', '云看起来像棉花糖。',
+    '悄悄说:我在攒星币。', '要不要休息一下?', '这边风景不错。',
+  ],
+  click: ['嘿嘿。', '再戳要收费啦', '头晕晕……', '轻一点嘛。', '有什么事吗?'],
+  ctl: ['交给我!', '看我的!', '出发!'],
+  work: ['开工啦。', '让我盯着点……', '在忙,勿扰。'],
+  done: ['呼——完成啦。', '又搞定一轮!', '辛苦辛苦。'],
+  low: ['有点累了,想休息……', '心情不太好,陪我玩玩?', '能量快见底了……'],
+  drag: ['放我下来!', '抓稳了……', '飞起来咯!'],
+} as const
+function pick(pool: readonly string[]): string {
+  return pool[Math.floor(Math.random() * pool.length)]
+}
+
 // ── pixel art (verbatim from terminal-web) ──────────────────────────────────
 const PAL: Record<string, string> = {
   o: '#4a4553', h: '#f6f7fc', H: '#dcdff0', s: '#ffe9dc', S: '#f2cdb9',
@@ -130,7 +147,15 @@ function injectStyles(): void {
 .dsh-pet-sprite-count.on{opacity:1}
 .dsh-pet-sprite-spark{position:absolute;z-index:6;width:6px;height:6px;background:#ffd33d;border:1px solid rgba(0,0,0,.25);pointer-events:none;animation:dshPetSpriteSpark .6s ease-out forwards}
 @keyframes dshPetSpriteSpark{to{transform:translate(var(--dx),var(--dy));opacity:0}}
-.dsh-pet-sprite-ctl{position:absolute;top:-30px;right:-8px;z-index:6;font:800 10.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.18);border-radius:999px;padding:3px 10px;color:#7b8190;pointer-events:none;box-shadow:0 2px 0 rgba(0,0,0,.12);white-space:nowrap}
+.dsh-pet-sprite-ctl{position:absolute;top:-30px;right:-8px;z-index:6;font:800 10.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.18);border-radius:999px;padding:3px 10px;color:#7b8190;pointer-events:none;box-shadow:0 2px 0 rgba(0,0,0,.12);white-space:nowrap;transition:opacity .55s}
+.dsh-pet-sprite-bubble{position:absolute;bottom:calc(100% + 9px);left:50%;z-index:7;max-width:190px;background:#fff;border:2.5px solid #4a4553;border-radius:12px;padding:4px 11px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#4a4553;white-space:nowrap;pointer-events:none;box-shadow:0 2.5px 0 rgba(0,0,0,.15);animation:dshPetSpriteBubbleIn .5s cubic-bezier(.2,1.7,.4,1) both}
+.dsh-pet-sprite-bubble::after{content:'';position:absolute;top:calc(100% - 6.5px);left:50%;width:11px;height:11px;background:#fff;border-right:2.5px solid #4a4553;border-bottom:2.5px solid #4a4553;transform:translateX(-50%) rotate(45deg)}
+@keyframes dshPetSpriteBubbleIn{from{opacity:0;transform:translateX(-50%) translateY(9px) scale(.55)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+.dsh-pet-sprite-unit{cursor:grab}
+.dsh-pet-sprite-unit:active{cursor:grabbing}
+.dsh-pet-sprite-unit.dsh-pet-sprite-dragging{filter:drop-shadow(0 7px 9px rgba(0,0,0,.24))}
+.dsh-pet-sprite-dragging canvas{animation:dshPetSpriteHang .8s ease-in-out infinite alternate}
+@keyframes dshPetSpriteHang{from{transform:rotate(-8deg) scale(1.1)}to{transform:rotate(8deg) scale(1.1)}}
 .dsh-pet-sprite-status{position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);z-index:6;font:800 9.5px ui-monospace,Menlo,Consolas,monospace;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.14);border-radius:999px;padding:1px 8px;color:#7b8190;pointer-events:none;white-space:nowrap;box-shadow:0 2px 0 rgba(0,0,0,.10)}
 @media (prefers-reduced-motion:reduce){.dsh-pet-sprite-plus{animation-duration:.4s}}
 `
@@ -178,10 +203,12 @@ export const ChatPet: FC = () => {
       }
       lastUserCount = users.length
       const streaming = !!document.querySelector('[data-streaming]')
+      if (!wasStreaming && streaming && users.length > 0) say(pick(CHAT_LINES.work))
       if (wasStreaming && !streaming) {
         const nodes = document.querySelectorAll('[data-chat-flow-key]')
         const lastNode = nodes[nodes.length - 1]
         engine.onAssistantDone(lastNode?.textContent?.length ?? 0)
+        if (users.length > 0) say(pick(CHAT_LINES.done))
       }
       wasStreaming = streaming
     }
@@ -207,6 +234,13 @@ export const ChatPet: FC = () => {
     const keys: Record<string, boolean> = {}
     let playerCtl = false, lastKeyAt = 0, airJumped = false, dropP: Platform | null = null, moving = false
 
+    // chat bubble + drag-and-drop state
+    let bubbleEl: HTMLDivElement | null = null
+    let bubbleTimer: ReturnType<typeof setTimeout> | undefined
+    let nextChatAt = 0
+    let dragging = false, dragMoved = false, dragId = -1
+    let dragX = 0, dragY = 0
+
     function playground(): DOMRect | null {
       const el = document.querySelector('[data-conversation-scroll]')
       const r = el?.getBoundingClientRect()
@@ -222,6 +256,14 @@ export const ChatPet: FC = () => {
         const r = els[i].getBoundingClientRect()
         if (r.width < 70 || r.bottom < 20 || r.top <= 0 || r.top >= fr.bottom - 24) continue
         out.push({ x1: r.left - fr.left, x2: r.right - fr.left, y: fr.bottom - 4 - r.top })
+      }
+      // the composer card is a wide, stable platform near the bottom
+      const comp = document.querySelector('[data-composer-card]')
+      if (comp) {
+        const r = comp.getBoundingClientRect()
+        if (r.width >= 100 && r.top > 20) {
+          out.push({ x1: r.left - fr.left, x2: r.right - fr.left, y: fr.bottom - 4 - r.top })
+        }
       }
       plats = out
     }
@@ -267,17 +309,42 @@ export const ChatPet: FC = () => {
         setTimeout(() => s.remove(), 650)
       }
     }
+    function say(text: string): void {
+      if (bubbleEl) { bubbleEl.remove(); clearTimeout(bubbleTimer) }
+      const el = document.createElement('div')
+      el.className = 'dsh-pet-sprite-bubble'
+      el.textContent = text
+      unit.appendChild(el)
+      bubbleEl = el
+      const dur = Math.max(2400, 1300 + text.length * 200)
+      bubbleTimer = setTimeout(() => { el.remove(); if (bubbleEl === el) bubbleEl = null }, dur)
+    }
     function typingField(): boolean {
       const a = document.activeElement
       if (!a) return false
       return !!(a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || (a as HTMLElement).isContentEditable)
     }
+    let ctlFadeTimer: ReturnType<typeof setTimeout> | undefined
+    function showCtlHint(): void {
+      if (!ctlHint) return
+      ctlHint.style.display = ''
+      ctlHint.style.opacity = '1'
+      clearTimeout(ctlFadeTimer)
+      ctlFadeTimer = setTimeout(() => { if (ctlHint) ctlHint.style.opacity = '0' }, 3500)
+    }
     function setCtl(on: boolean): void {
       if (playerCtl === on) return
       playerCtl = on
-      if (ctlHint) ctlHint.style.display = on ? '' : 'none'
-      if (on && ctlHint) ctlHint.textContent = '操控中：A/D 移动 · 空格 跳跃 · W 攀爬 · S 下落'
-      if (!on) { for (const k in keys) keys[k] = false; planAt = lastT + 1500 }
+      if (on) {
+        if (ctlHint) ctlHint.textContent = '操控中：A/D 移动 · 空格 跳跃 · W 攀爬 · S 下落'
+        showCtlHint()
+        if (Math.random() < .6) say(pick(CHAT_LINES.ctl))
+      } else {
+        clearTimeout(ctlFadeTimer)
+        if (ctlHint) ctlHint.style.display = 'none'
+        for (const k in keys) keys[k] = false
+        planAt = lastT + 1500
+      }
     }
     function tryClimbNear(): boolean {
       for (const p of plats) {
@@ -290,6 +357,7 @@ export const ChatPet: FC = () => {
     }
 
     function frameFor(): string[] {
+      if (dragging) return F.JP
       if (state === 'air') return F.JP
       if (state === 'climb') return ft % 2 ? F.KA : F.KB
       if (moving || (goal && Math.abs(goal.x - x) > 3)) return ft % 4 < 2 ? F.KA : F.KB
@@ -318,10 +386,24 @@ export const ChatPet: FC = () => {
         mode = document.querySelector('[data-streaming]') ? 'work' : 'idle'
         bridgeChat()
         if (state === 'ground' && h > 0 && !support()) { state = 'air'; vy = 0; plat = null }
+        // ambient chat: idle-only, low frequency, low-status lines win
+        if (!playerCtl && !dragging && mode === 'idle' && state === 'ground') {
+          if (nextChatAt === 0) nextChatAt = now + 15000 + Math.random() * 15000
+          else if (now > nextChatAt) {
+            const s = engine.getStats()
+            say(s.power < 30 || s.mood < 30 ? pick(CHAT_LINES.low) : pick(CHAT_LINES.idle))
+            nextChatAt = now + 24000 + Math.random() * 20000
+          }
+        }
       }
       if (playerCtl && now - lastKeyAt > 10000) setCtl(false)
       moving = false
-      if (playerCtl) {
+      if (dragging) {
+        // carried by pointer: no physics, follow the hand, stay in bounds
+        goal = null; climb = null; vy = 0
+        x = Math.max(2, Math.min(floorX - 52, dragX - fr.left - PW / 2))
+        h = Math.max(0, floorY - dragY)
+      } else if (playerCtl) {
         goal = null
         if (keys.a) { x -= WALK * 1.7 * dt; dir = -1; moving = true }
         if (keys.d) { x += WALK * 1.7 * dt; dir = 1; moving = true }
@@ -330,38 +412,40 @@ export const ChatPet: FC = () => {
         goal = null; climb = null
         if (state === 'climb') state = 'air'
       }
-      if (state === 'climb' && climb) {
-        dir = climb.x > x ? 1 : (climb.x < x ? -1 : dir)
-        if (Math.abs(climb.x - x) > 3) x += WALK * dt * (climb.x > x ? 1 : -1)
-        else {
-          h += CLIMBV * dt
-          if (h >= climb.top) {
-            h = climb.top; plat = climb.p
-            x = Math.max(climb.p.x1 + 2, Math.min(climb.p.x2 - PW - 2, x))
-            state = 'ground'; climb = null; goal = null
-          }
-        }
-      } else if (state === 'air') {
-        h += vy * dt
-        const pv = vy
-        vy -= G * dt
-        if (vy < 0) {
-          for (const p of plats) {
-            if (dropP && Math.abs(p.y - dropP.y) < 8) continue
-            if (h <= p.y && h + ((pv > 0 ? pv : 0) - vy) * dt + 30 >= p.y && x + PW / 2 > p.x1 - 4 && x + PW / 2 < p.x2 + 4 && p.y > 2) {
-              h = p.y; vy = 0; state = 'ground'; plat = p; goal = null; dropP = null; airJumped = false
-              break
+      if (!dragging) {
+        if (state === 'climb' && climb) {
+          dir = climb.x > x ? 1 : (climb.x < x ? -1 : dir)
+          if (Math.abs(climb.x - x) > 3) x += WALK * dt * (climb.x > x ? 1 : -1)
+          else {
+            h += CLIMBV * dt
+            if (h >= climb.top) {
+              h = climb.top; plat = climb.p
+              x = Math.max(climb.p.x1 + 2, Math.min(climb.p.x2 - PW - 2, x))
+              state = 'ground'; climb = null; goal = null
             }
           }
-        }
-        if (h <= 0) { h = 0; vy = 0; state = 'ground'; plat = null; dropP = null; airJumped = false }
-      } else if (goal) {
-        dir = goal.x > x + 2 ? 1 : (goal.x < x - 2 ? -1 : dir)
-        if (Math.abs(goal.x - x) > 3) x += WALK * dt * dir
-        else if (goal.jump) { const j = goal.jump; goal = null; jumpTo(j) }
-        else goal = null
-      } else if (!playerCtl && mode === 'idle' && state === 'ground' && now > planAt) plan(now)
-      if (!playerCtl && state === 'ground' && mode !== 'idle' && h > 0) { state = 'air'; vy = 0 }
+        } else if (state === 'air') {
+          h += vy * dt
+          const pv = vy
+          vy -= G * dt
+          if (vy < 0) {
+            for (const p of plats) {
+              if (dropP && Math.abs(p.y - dropP.y) < 8) continue
+              if (h <= p.y && h + ((pv > 0 ? pv : 0) - vy) * dt + 30 >= p.y && x + PW / 2 > p.x1 - 4 && x + PW / 2 < p.x2 + 4 && p.y > 2) {
+                h = p.y; vy = 0; state = 'ground'; plat = p; goal = null; dropP = null; airJumped = false
+                break
+              }
+            }
+          }
+          if (h <= 0) { h = 0; vy = 0; state = 'ground'; plat = null; dropP = null; airJumped = false }
+        } else if (goal) {
+          dir = goal.x > x + 2 ? 1 : (goal.x < x - 2 ? -1 : dir)
+          if (Math.abs(goal.x - x) > 3) x += WALK * dt * dir
+          else if (goal.jump) { const j = goal.jump; goal = null; jumpTo(j) }
+          else goal = null
+        } else if (!playerCtl && mode === 'idle' && state === 'ground' && now > planAt) plan(now)
+        if (!playerCtl && state === 'ground' && mode !== 'idle' && h > 0) { state = 'air'; vy = 0 }
+      }
       const mx = floorX - 52
       if (x < 2) x = 2
       if (x > mx) x = mx
@@ -391,6 +475,7 @@ export const ChatPet: FC = () => {
       e.preventDefault()
       e.stopImmediatePropagation()
       lastKeyAt = performance.now()
+      showCtlHint()
       if (k === 'sp' && !keys.sp) {
         if (state === 'ground') { vy = JUMPV; state = 'air'; airJumped = false; goal = null; climb = null }
         else if (state === 'air' && !airJumped) { airJumped = true; vy = Math.max(vy, SKILLV * .85); burst() }
@@ -406,7 +491,49 @@ export const ChatPet: FC = () => {
     }
     const onBlur = (): void => { for (const k in keys) keys[k] = false }
 
+    // drag-and-drop: hold left button on the pet, move to pick it up,
+    // release anywhere to drop it (falls with gravity onto platforms)
+    const onUnitPointerDown = (e: PointerEvent): void => {
+      if (e.button !== 0) return
+      dragMoved = false
+      dragId = e.pointerId
+      dragX = e.clientX
+      dragY = e.clientY
+      try { unit.setPointerCapture(dragId) } catch { /* not fatal */ }
+    }
+    const onUnitPointerMove = (e: PointerEvent): void => {
+      if (e.pointerId !== dragId) return
+      if (!dragMoved) {
+        const dx = e.clientX - dragX, dy = e.clientY - dragY
+        if (Math.hypot(dx, dy) < 6) return
+        dragMoved = true
+        dragging = true
+        unit.classList.add('dsh-pet-sprite-dragging')
+        if (Math.random() < .5) say(pick(CHAT_LINES.drag))
+      }
+      dragX = e.clientX
+      dragY = e.clientY
+    }
+    const onUnitPointerUp = (e: PointerEvent): void => {
+      if (e.pointerId !== dragId) return
+      dragId = -1
+      try { unit.releasePointerCapture(e.pointerId) } catch { /* not fatal */ }
+      if (dragging) {
+        dragging = false
+        unit.classList.remove('dsh-pet-sprite-dragging')
+        // hand over to physics: free fall from the release point
+        state = 'air'
+        vy = 0
+        plat = null
+        climb = null
+        goal = null
+        dropP = null
+        airJumped = false
+      }
+    }
+
     const onClickPet = (): void => {
+      if (dragMoved) { dragMoved = false; return }
       count++
       try { localStorage.setItem('dshPetSpriteClicks', String(count)) } catch { /* ignore */ }
       if (!still) {
@@ -425,6 +552,7 @@ export const ChatPet: FC = () => {
         clearTimeout(badgeTimer)
         badgeTimer = setTimeout(() => badge.classList.remove('on'), 1600)
       }
+      if (Math.random() < .3) say(pick(CHAT_LINES.click))
     }
 
     const onContextMenu = (e: MouseEvent): void => {
@@ -442,6 +570,10 @@ export const ChatPet: FC = () => {
     window.addEventListener('blur', onBlur)
     unit.addEventListener('click', onClickPet)
     unit.addEventListener('contextmenu', onContextMenu)
+    unit.addEventListener('pointerdown', onUnitPointerDown)
+    unit.addEventListener('pointermove', onUnitPointerMove)
+    unit.addEventListener('pointerup', onUnitPointerUp)
+    unit.addEventListener('pointercancel', onUnitPointerUp)
     if (ctlHint) ctlHint.style.display = 'none'
 
     drawPet(cv, F.I)
@@ -452,17 +584,27 @@ export const ChatPet: FC = () => {
       return () => {
         clearInterval(slow)
         clearInterval(statusTimer)
+        clearTimeout(ctlFadeTimer)
+        clearTimeout(bubbleTimer)
+        bubbleEl?.remove()
         document.removeEventListener('pointerdown', onPointerDown, true)
         document.removeEventListener('keydown', onKeyDown, true)
         document.removeEventListener('keyup', onKeyUp, true)
         window.removeEventListener('blur', onBlur)
         unit.removeEventListener('click', onClickPet)
         unit.removeEventListener('contextmenu', onContextMenu)
+        unit.removeEventListener('pointerdown', onUnitPointerDown)
+        unit.removeEventListener('pointermove', onUnitPointerMove)
+        unit.removeEventListener('pointerup', onUnitPointerUp)
+        unit.removeEventListener('pointercancel', onUnitPointerUp)
       }
     }
     return () => {
       cancelAnimationFrame(raf)
       clearTimeout(badgeTimer)
+      clearTimeout(ctlFadeTimer)
+      clearTimeout(bubbleTimer)
+      bubbleEl?.remove()
       clearInterval(statusTimer)
       document.removeEventListener('pointerdown', onPointerDown, true)
       document.removeEventListener('keydown', onKeyDown, true)
@@ -470,6 +612,10 @@ export const ChatPet: FC = () => {
       window.removeEventListener('blur', onBlur)
       unit.removeEventListener('click', onClickPet)
       unit.removeEventListener('contextmenu', onContextMenu)
+      unit.removeEventListener('pointerdown', onUnitPointerDown)
+      unit.removeEventListener('pointermove', onUnitPointerMove)
+      unit.removeEventListener('pointerup', onUnitPointerUp)
+      unit.removeEventListener('pointercancel', onUnitPointerUp)
     }
   }, [])
 
