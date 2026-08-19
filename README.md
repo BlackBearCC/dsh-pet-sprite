@@ -19,7 +19,7 @@ Right-click the pet to open the care panel (status / interactions / inventory / 
 ## Install
 
 ```sh
-dsh plugin --profile web add github:<your-account>/dsh-pet-sprite
+dsh plugin --profile web add github:BlackBearCC/dsh-pet-sprite
 ```
 
 Then restart DSH (`dsh web`) and open any conversation — the pet spawns at the bottom of the chat flow.

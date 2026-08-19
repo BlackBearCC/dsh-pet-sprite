@@ -80,7 +80,7 @@ function injectStyles(): void {
 .dsh-pet-sprite-dragging canvas{animation:dshPetSpriteHang .8s ease-in-out infinite alternate}
 @keyframes dshPetSpriteHang{from{transform:rotate(-8deg) scale(1.1)}to{transform:rotate(8deg) scale(1.1)}}
 .dsh-pet-sprite-status{position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);z-index:6;font:800 9.5px ui-monospace,Menlo,Consolas,monospace;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.14);border-radius:999px;padding:1px 8px;color:#7b8190;pointer-events:none;white-space:nowrap;box-shadow:0 2px 0 rgba(0,0,0,.10)}
-.dsh-pet-sprite-egg{position:absolute;right:28px;bottom:34px;width:40px;height:47px;pointer-events:auto;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 2.5px 0 rgba(0,0,0,.13));animation:dshPetSpriteEggIn .6s cubic-bezier(.2,1.7,.4,1) both}
+.dsh-pet-sprite-egg{position:absolute;left:58px;bottom:14px;width:40px;height:47px;pointer-events:auto;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 2.5px 0 rgba(0,0,0,.13));animation:dshPetSpriteEggIn .6s cubic-bezier(.2,1.7,.4,1) both}
 .dsh-pet-sprite-egg canvas{width:100%;height:100%;image-rendering:pixelated;display:block;animation:dshPetSpriteEggWobble 4.8s ease-in-out infinite;transform-origin:50% 92%}
 @keyframes dshPetSpriteEggIn{from{opacity:0;transform:translateY(18px) scale(.5)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes dshPetSpriteEggWobble{0%,66%,100%{transform:rotate(0)}70%{transform:rotate(-7deg)}74%{transform:rotate(6deg)}78%{transform:rotate(-4deg)}82%{transform:rotate(1.5deg)}86%{transform:rotate(0)}89%{transform:rotate(0) translateY(-2px)}91%{transform:rotate(0) translateY(0)}}
@@ -100,6 +100,7 @@ export const ChatPet: FC = () => {
   const unitRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const eggCanvasRef = useRef<HTMLCanvasElement>(null)
+  const eggRef = useRef<HTMLDivElement>(null)
   const countRef = useRef<HTMLSpanElement>(null)
   const ctlRef = useRef<HTMLSpanElement>(null)
   const statusRef = useRef<HTMLSpanElement>(null)
@@ -128,6 +129,35 @@ export const ChatPet: FC = () => {
     if (petId || pickerOpen) return
     const cv = eggCanvasRef.current
     if (cv) drawPet(cv, EGG_ROWS)
+  }, [petId, pickerOpen])
+
+  // dock the egg beside the sidebar's Settings trigger (bottom-left of
+  // the screen). The trigger has no stable data attribute, so we take
+  // the bottom-left-most button[aria-haspopup="dialog"]; a slow poll
+  // keeps the dock correct when the sidebar toggles rail/wide.
+  useEffect(() => {
+    if (petId || pickerOpen) return
+    const egg = eggRef.current
+    if (!egg) return
+    const place = (): void => {
+      let best: DOMRect | null = null
+      for (const b of document.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="dialog"]')) {
+        const r = b.getBoundingClientRect()
+        if (r.width === 0 || r.bottom < window.innerHeight * 0.6 || r.left > window.innerWidth * 0.35) continue
+        if (!best || r.bottom > best.bottom || (r.bottom === best.bottom && r.left < best.left)) best = r
+      }
+      if (best) {
+        egg.style.left = `${Math.round(best.right + 10)}px`
+        egg.style.bottom = `${Math.round(window.innerHeight - best.bottom)}px`
+      } else {
+        egg.style.left = '58px'
+        egg.style.bottom = '14px'
+      }
+    }
+    place()
+    const iv = setInterval(place, 1500)
+    window.addEventListener('resize', place)
+    return () => { clearInterval(iv); window.removeEventListener('resize', place) }
   }, [petId, pickerOpen])
 
   // one-off hint bubble ("knock knock?") a few seconds after first
@@ -604,6 +634,7 @@ export const ChatPet: FC = () => {
       )}
       {!petId && !pickerOpen && (
         <div
+          ref={eggRef}
           className="dsh-pet-sprite-egg"
           title="点一点，看看谁在里面"
           onClick={() => setPickerOpen(true)}
