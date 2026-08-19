@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FC } from 'react'
 import { MiniEngine } from './game/mini-engine.ts'
 import { CarePanel } from './CarePanel.tsx'
+import { PetChatBox, type ChatModel, type ChatTurn } from './PetChatBox.tsx'
 import { PetPicker } from './PetPicker.tsx'
 import { drawPet, EGG_ROWS, PET_ART, PET_IDS, PET_META, type Frames, type PetId } from './pet-art.ts'
 
@@ -10,9 +11,10 @@ import { drawPet, EGG_ROWS, PET_ART, PET_IDS, PET_META, type Frames, type PetId 
 // sprite drawn on canvas, no images. The conversation's message nodes
 // are platforms: the pet wanders, jumps and climbs them on its own;
 // clicking the chat background hands over WASD/space control for 10s.
-// Clicking the pet = +1 combo with a skill jump and gold particle burst.
-// Right-click the pet opens the care panel (PetClaw gameplay systems:
-// attributes / level / care / shop / rewards) and the companion picker.
+// Left-click the pet opens a side chat box (LLM replies via the plugin's
+// node-side /plugins/dsh-pet-sprite/chat route, model pickable in the
+// care panel's settings tab). Right-click opens the care panel (PetClaw
+// gameplay systems) and the companion picker.
 
 const PET_ID_KEY = 'dshPetSpriteGame:petId'
 function loadPetId(): PetId | null {
@@ -23,6 +25,31 @@ function loadPetId(): PetId | null {
 }
 function savePetId(id: PetId): void {
   try { localStorage.setItem(PET_ID_KEY, id) } catch { /* ignore */ }
+}
+
+// ── companion chat: history + model choice persist in localStorage ──────────
+const CHAT_HISTORY_KEY = 'dshPetSpriteChat:history'
+const CHAT_MODEL_KEY = 'dshPetSpriteChat:model'
+function loadChatHistory(): ChatTurn[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY) ?? '[]') as ChatTurn[]
+    return Array.isArray(v) ? v.filter(t => t && typeof t.text === 'string') : []
+  } catch { return [] }
+}
+function saveChatHistory(history: ChatTurn[]): void {
+  try { localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history.slice(-30))) } catch { /* ignore */ }
+}
+function loadChatModel(): ChatModel | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(CHAT_MODEL_KEY) ?? 'null') as ChatModel | null
+    return v && typeof v.provider === 'string' && typeof v.model === 'string' ? v : null
+  } catch { return null }
+}
+function saveChatModel(model: ChatModel | null): void {
+  try {
+    if (model === null) localStorage.removeItem(CHAT_MODEL_KEY)
+    else localStorage.setItem(CHAT_MODEL_KEY, JSON.stringify(model))
+  } catch { /* ignore */ }
 }
 
 // Engine singleton: gameplay state lives in localStorage, one instance
@@ -43,7 +70,6 @@ const CHAT_LINES = {
     '今天的代码顺利吗?', '站得有点久了……', '云看起来像棉花糖。',
     '悄悄说:我在攒星币。', '要不要休息一下?', '这边风景不错。',
   ],
-  click: ['嘿嘿。', '再戳要收费啦', '头晕晕……', '轻一点嘛。', '有什么事吗?'],
   ctl: ['交给我!', '看我的!', '出发!'],
   work: ['开工啦。', '让我盯着点……', '在忙,勿扰。'],
   done: ['呼——完成啦。', '又搞定一轮!', '辛苦辛苦。'],
@@ -64,15 +90,12 @@ function injectStyles(): void {
 .dsh-pet-sprite-layer{position:fixed;inset:0;z-index:900;pointer-events:none}
 .dsh-pet-sprite-unit{position:absolute;width:48px;height:56px;pointer-events:auto;cursor:pointer;filter:drop-shadow(0 2px 0 rgba(0,0,0,.12));opacity:.97;user-select:none;-webkit-tap-highlight-color:transparent}
 .dsh-pet-sprite-unit canvas{width:100%;height:100%;image-rendering:pixelated;display:block}
-.dsh-pet-sprite-plus{position:absolute;left:50%;top:-15px;transform:translateX(-50%);z-index:6;font:900 16px ui-monospace,Menlo,Consolas,monospace;color:#ffd33d;pointer-events:none;animation:dshPetSpritePlus .9s cubic-bezier(.2,.8,.4,1) forwards;letter-spacing:-1px;text-shadow:1.5px 0 0 #4a4553,-1.5px 0 0 #4a4553,0 1.5px 0 #4a4553,0 -1.5px 0 #4a4553,1.5px 1.5px 0 #4a4553,-1.5px 1.5px 0 #4a4553,1.5px -1.5px 0 #4a4553,-1.5px -1.5px 0 #4a4553}
-@keyframes dshPetSpritePlus{from{opacity:0;transform:translateX(-50%) translateY(4px) scale(.5)}25%{opacity:1;transform:translateX(-50%) translateY(-10px) scale(1.35)}to{opacity:0;transform:translateX(-50%) translateY(-34px) scale(1)}}
-.dsh-pet-sprite-count{position:absolute;top:-30px;left:-6px;z-index:6;font:900 11px ui-monospace,Menlo,Consolas,monospace;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.18);border-radius:999px;padding:2px 9px;color:inherit;pointer-events:none;opacity:0;transition:opacity .25s;box-shadow:0 2px 0 rgba(0,0,0,.12)}
-.dsh-pet-sprite-count.on{opacity:1}
 .dsh-pet-sprite-spark{position:absolute;z-index:6;width:6px;height:6px;background:#ffd33d;border:1px solid rgba(0,0,0,.25);pointer-events:none;animation:dshPetSpriteSpark .6s ease-out forwards}
 @keyframes dshPetSpriteSpark{to{transform:translate(var(--dx),var(--dy));opacity:0}}
 .dsh-pet-sprite-ctl{position:absolute;top:-30px;right:-8px;z-index:6;font:800 10.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.18);border-radius:999px;padding:3px 10px;color:#7b8190;pointer-events:none;box-shadow:0 2px 0 rgba(0,0,0,.12);white-space:nowrap;transition:opacity .55s}
 .dsh-pet-sprite-bubble{position:absolute;bottom:calc(100% + 9px);left:50%;z-index:7;max-width:190px;background:#fff;border:2.5px solid #4a4553;border-radius:12px;padding:4px 11px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#4a4553;white-space:nowrap;pointer-events:none;box-shadow:0 2.5px 0 rgba(0,0,0,.15);animation:dshPetSpriteBubbleIn .5s cubic-bezier(.2,1.7,.4,1) both}
 .dsh-pet-sprite-bubble::after{content:'';position:absolute;top:calc(100% - 6.5px);left:50%;width:11px;height:11px;background:#fff;border-right:2.5px solid #4a4553;border-bottom:2.5px solid #4a4553;transform:translateX(-50%) rotate(45deg)}
+.dsh-pet-sprite-bubble-wrap{white-space:pre-wrap;word-break:break-word;max-width:230px;line-height:1.6;text-align:left}
 @keyframes dshPetSpriteBubbleIn{from{opacity:0;transform:translateX(-50%) translateY(9px) scale(.55)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
 .dsh-pet-sprite-unit{cursor:grab}
 .dsh-pet-sprite-unit:active{cursor:grabbing}
@@ -101,9 +124,11 @@ export const ChatPet: FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const eggCanvasRef = useRef<HTMLCanvasElement>(null)
   const eggRef = useRef<HTMLDivElement>(null)
-  const countRef = useRef<HTMLSpanElement>(null)
   const ctlRef = useRef<HTMLSpanElement>(null)
   const statusRef = useRef<HTMLSpanElement>(null)
+  // lets the component layer fire pet bubbles (the bubble lives in the
+  // physics effect's closure)
+  const sayRef = useRef<(text: string, wrap?: boolean) => void>(() => {})
   // null until a companion is chosen: a quiet egg sits in the corner
   // instead — clicking it (never auto-popup) opens the picker
   const [petId, setPetId] = useState<PetId | null>(() => loadPetId())
@@ -111,6 +136,11 @@ export const ChatPet: FC = () => {
   const [panelOpen, setPanelOpen] = useState(false)
   const [anchor, setAnchor] = useState({ x: 0, y: 0 })
   const [eggHint, setEggHint] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatHistory, setChatHistory] = useState<ChatTurn[]>(() => loadChatHistory())
+  const [chatBusy, setChatBusy] = useState(false)
+  const [chatError, setChatError] = useState<string | null>(null)
+  const [chatModel, setChatModel] = useState<ChatModel | null>(() => loadChatModel())
   const engine = getEngine()
 
   const handlePick = (id: PetId): void => {
@@ -121,6 +151,54 @@ export const ChatPet: FC = () => {
   const openPicker = (): void => {
     setPanelOpen(false)
     setPickerOpen(true)
+  }
+
+  // one companion chat round-trip: append the user turn, POST to the
+  // plugin's node route, surface the reply as both a history row and a
+  // pet bubble. Errors are shown inline, never swallowed.
+  const handleChatSend = async (text: string): Promise<void> => {
+    if (petId === null || chatBusy) return
+    setChatError(null)
+    setChatHistory(prev => {
+      const next = [...prev, { role: 'user' as const, text }]
+      saveChatHistory(next)
+      return next
+    })
+    if (chatModel === null) {
+      setChatError('还没有选择聊天模型：在照顾面板 → 设置 里选一个再试。')
+      return
+    }
+    setChatBusy(true)
+    sayRef.current('让我想想……')
+    try {
+      const history = [...chatHistory, { role: 'user' as const, text }]
+        .map(t => ({ role: t.role === 'user' ? 'user' as const : 'assistant' as const, content: t.text }))
+      const res = await fetch('/plugins/dsh-pet-sprite/chat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          petName: PET_META[petId].name,
+          message: text,
+          history: history.slice(0, -1),
+          provider: chatModel.provider,
+          model: chatModel.model,
+        }),
+      })
+      const data = await res.json().catch(() => ({})) as { reply?: string; error?: string }
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      const reply = data.reply ?? ''
+      setChatHistory(prev => {
+        const next = [...prev, { role: 'pet' as const, text: reply }]
+        saveChatHistory(next)
+        return next
+      })
+      sayRef.current(reply.length > 150 ? `${reply.slice(0, 150)}…` : reply, true)
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : String(error))
+      sayRef.current('呜……卡住了。')
+    } finally {
+      setChatBusy(false)
+    }
   }
 
   // pre-hatch egg sprite: redraw on every remount (the egg unmounts
@@ -176,7 +254,6 @@ export const ChatPet: FC = () => {
     const layer = layerRef.current
     const unit = unitRef.current
     const cv = canvasRef.current
-    const badge = countRef.current
     const ctlHint = ctlRef.current
     const statusBar = statusRef.current
     if (!layer || !unit || !cv) return
@@ -212,9 +289,6 @@ export const ChatPet: FC = () => {
     }
 
     const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
-    let count = 0
-    try { count = parseInt(localStorage.getItem('dshPetSpriteClicks') ?? '0', 10) || 0 } catch { count = 0 }
-    let badgeTimer: ReturnType<typeof setTimeout> | undefined
 
     // physics constants, kept identical to the original game
     const G = 1500, WALK = 58, CLIMBV = 85, SKILLV = 780, JUMPV = 420, PW = 48
@@ -307,16 +381,17 @@ export const ChatPet: FC = () => {
         setTimeout(() => s.remove(), 650)
       }
     }
-    function say(text: string): void {
+    function say(text: string, wrap = false): void {
       if (bubbleEl) { bubbleEl.remove(); clearTimeout(bubbleTimer) }
       const el = document.createElement('div')
-      el.className = 'dsh-pet-sprite-bubble'
+      el.className = wrap ? 'dsh-pet-sprite-bubble dsh-pet-sprite-bubble-wrap' : 'dsh-pet-sprite-bubble'
       el.textContent = text
       unit.appendChild(el)
       bubbleEl = el
       const dur = Math.max(2400, 1300 + text.length * 200)
       bubbleTimer = setTimeout(() => { el.remove(); if (bubbleEl === el) bubbleEl = null }, dur)
     }
+    sayRef.current = say
     function typingField(): boolean {
       const a = document.activeElement
       if (!a) return false
@@ -536,25 +611,10 @@ export const ChatPet: FC = () => {
 
     const onClickPet = (): void => {
       if (dragMoved) { dragMoved = false; return }
-      count++
-      try { localStorage.setItem('dshPetSpriteClicks', String(count)) } catch { /* ignore */ }
-      if (!still) {
-        burst()
-        if (state !== 'climb') { vy = Math.max(vy, SKILLV * .9); state = 'air' }
-      }
-      const fl = document.createElement('span')
-      fl.className = 'dsh-pet-sprite-plus'
-      fl.textContent = '+1'
-      fl.style.marginLeft = `${Math.round(Math.random() * 14 - 7)}px`
-      unit.appendChild(fl)
-      setTimeout(() => fl.remove(), 950)
-      if (badge) {
-        badge.textContent = `×${count}`
-        badge.classList.add('on')
-        clearTimeout(badgeTimer)
-        badgeTimer = setTimeout(() => badge.classList.remove('on'), 1600)
-      }
-      if (Math.random() < .3) say(pick(CHAT_LINES.click))
+      // left click opens the side chat box beside the pet (no jump)
+      const r = unit.getBoundingClientRect()
+      setAnchor({ x: r.left, y: r.top + r.height })
+      setChatOpen(true)
     }
 
     const onContextMenu = (e: MouseEvent): void => {
@@ -603,7 +663,6 @@ export const ChatPet: FC = () => {
     }
     return () => {
       cancelAnimationFrame(raf)
-      clearTimeout(badgeTimer)
       clearTimeout(ctlFadeTimer)
       clearTimeout(bubbleTimer)
       bubbleEl?.remove()
@@ -625,8 +684,7 @@ export const ChatPet: FC = () => {
   return (
     <div ref={layerRef} className="dsh-pet-sprite-layer">
       {petId && (
-        <div ref={unitRef} className="dsh-pet-sprite-unit" title={`${PET_META[petId].name}（右键打开照顾面板）`}>
-          <span ref={countRef} className="dsh-pet-sprite-count" />
+        <div ref={unitRef} className="dsh-pet-sprite-unit" title={`${PET_META[petId].name}（左键聊天 · 右键照顾面板）`}>
           <span ref={ctlRef} className="dsh-pet-sprite-ctl" />
           <canvas ref={canvasRef} width={96} height={112} />
           <span ref={statusRef} className="dsh-pet-sprite-status" />
@@ -644,7 +702,28 @@ export const ChatPet: FC = () => {
         </div>
       )}
       {petId && panelOpen && (
-        <CarePanel engine={engine} anchor={anchor} petName={PET_META[petId].name} onSwitchPet={openPicker} onClose={() => setPanelOpen(false)} />
+        <CarePanel
+          engine={engine}
+          anchor={anchor}
+          petName={PET_META[petId].name}
+          chatModel={chatModel}
+          onSwitchPet={openPicker}
+          onChatModelChange={m => { setChatModel(m); saveChatModel(m) }}
+          onClose={() => setPanelOpen(false)}
+        />
+      )}
+      {petId && chatOpen && (
+        <PetChatBox
+          petId={petId}
+          anchor={anchor}
+          model={chatModel}
+          history={chatHistory}
+          busy={chatBusy}
+          error={chatError}
+          onSend={text => { void handleChatSend(text) }}
+          onClear={() => { setChatHistory([]); saveChatHistory([]) }}
+          onClose={() => setChatOpen(false)}
+        />
       )}
       {pickerOpen && (
         <PetPicker currentId={petId} onPick={handlePick} onClose={() => setPickerOpen(false)} />

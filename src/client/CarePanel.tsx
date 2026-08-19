@@ -1,17 +1,27 @@
 // Care panel for Pet — the pet-raising UI migrated from PetClaw's care chapter.
 // Right-click the pet to open near the character. Tabbed layout:
-// status+interactions / inventory / shop. Fixed light palette so it reads
-// the same under any DSH theme.
+// status+interactions / inventory / shop / settings. Fixed light palette so
+// it reads the same under any DSH theme.
 
 import { useCallback, useEffect, useState, type FC } from 'react'
 import type { MiniEngine } from './game/mini-engine.ts'
+import type { ChatModel } from './PetChatBox.tsx'
 
 interface Props {
   engine: MiniEngine
   anchor: { x: number; y: number } // pet screen position (panel opens beside it)
   petName: string // active companion name (header + switch button)
+  chatModel: ChatModel | null // LLM used by the side chat box
+  onChatModelChange: (model: ChatModel | null) => void // persist a new choice
   onSwitchPet: () => void // reopen the companion picker
   onClose: () => void
+}
+
+/** Provider+model list served by the plugin's node half. */
+interface ModelListEntry {
+  id: string
+  name: string
+  models: Array<{ id: string; name: string }>
 }
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -71,17 +81,40 @@ function injectPanelStyles(): void {
 .dsh-pet-sprite-buy:disabled{opacity:.35;cursor:not-allowed}
 .dsh-pet-sprite-buy:not(:disabled):active{transform:scale(.94)}
 .dsh-pet-sprite-switch{display:block;width:100%;margin-top:12px;color:#6b7280;background:#fff}
+.dsh-pet-sprite-set-note{color:#6b7280;font-size:10.5px;line-height:1.6;margin:4px 0 8px}
+.dsh-pet-sprite-set select{width:100%;border:1.5px solid #2a2f3e;border-radius:8px;padding:6px 8px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;background:#fff;margin-bottom:8px;outline:none}
+.dsh-pet-sprite-set label{display:block;font-size:10.5px;font-weight:800;color:#6b7280;margin:8px 0 4px}
+.dsh-pet-sprite-set-err{border:1.5px solid #e8434e;border-radius:8px;background:#ffe9ec;color:#b32832;font-size:10.5px;font-weight:700;padding:6px 9px;margin:6px 0;line-height:1.5;word-break:break-word}
 .dsh-pet-sprite-toast{position:fixed;z-index:960;background:#1f2430;color:#fff;font-size:12px;padding:7px 13px;border-radius:9px;box-shadow:0 4px 0 rgba(0,0,0,.2);animation:dshPetSpriteToast 2.6s ease forwards;max-width:260px}
 @keyframes dshPetSpriteToast{from{opacity:0;transform:translateY(8px)}10%,80%{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-6px)}}
 `
   document.head.appendChild(s)
 }
 
-export const CarePanel: FC<Props> = ({ engine, anchor, petName, onSwitchPet, onClose }) => {
+export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, onSwitchPet, onClose }) => {
   const [, bump] = useState(0)
-  const [tab, setTab] = useState<'status' | 'bag' | 'shop'>('status')
+  const [tab, setTab] = useState<'status' | 'bag' | 'shop' | 'set'>('status')
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
+  // provider/model options for the chat settings tab; fetched from the
+  // plugin's node route on first open of the tab
+  const [modelList, setModelList] = useState<ModelListEntry[] | null>(null)
+  const [modelListError, setModelListError] = useState<string | null>(null)
   useEffect(() => { injectPanelStyles() }, [])
+
+  const loadModels = useCallback(async () => {
+    if (modelList !== null || modelListError !== null) return
+    try {
+      const res = await fetch('/plugins/dsh-pet-sprite/models')
+      const data = await res.json().catch(() => ({})) as { providers?: ModelListEntry[]; error?: string }
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      setModelList(data.providers ?? [])
+    } catch (error) {
+      setModelListError(error instanceof Error ? error.message : String(error))
+    }
+  }, [modelList, modelListError])
+  useEffect(() => {
+    if (tab === 'set') void loadModels()
+  }, [tab, loadModels])
 
   const say = useCallback((text: string) => {
     setToast({ id: Date.now(), text })
@@ -152,6 +185,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, onSwitchPet, onC
           <button className={`dsh-pet-sprite-tab ${tab === 'status' ? 'on' : ''}`} onClick={() => setTab('status')}>状态</button>
           <button className={`dsh-pet-sprite-tab ${tab === 'bag' ? 'on' : ''}`} onClick={() => setTab('bag')}>背包</button>
           <button className={`dsh-pet-sprite-tab ${tab === 'shop' ? 'on' : ''}`} onClick={() => setTab('shop')}>商店</button>
+          <button className={`dsh-pet-sprite-tab ${tab === 'set' ? 'on' : ''}`} onClick={() => setTab('set')}>设置</button>
         </div>
         <div className="dsh-pet-sprite-panel-bd">
           {tab === 'status' && (
@@ -183,7 +217,6 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, onSwitchPet, onC
                   <button className="dsh-pet-sprite-btn" onClick={doRest}>睡一会</button>
                 </div>
               </div>
-              <button className="dsh-pet-sprite-btn dsh-pet-sprite-switch" onClick={onSwitchPet}>更换形象</button>
             </>
           )}
           {tab === 'bag' && (
@@ -210,6 +243,54 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, onSwitchPet, onC
                   <button className="dsh-pet-sprite-buy" disabled={!it.canBuy} onClick={() => doBuy(it.id)}>购买</button>
                 </div>
               ))}
+            </div>
+          )}
+          {tab === 'set' && (
+            <div className="dsh-pet-sprite-sec dsh-pet-sprite-set">
+              <h4>聊天模型</h4>
+              <div className="dsh-pet-sprite-set-note">
+                左键点击 {petName} 可以聊天；这里选择由哪个模型来扮演它（复用本页已配置的服务商和密钥）。
+              </div>
+              {modelListError !== null && <div className="dsh-pet-sprite-set-err">模型列表加载失败：{modelListError}</div>}
+              {modelList === null && modelListError === null && <div className="dsh-pet-sprite-set-note">加载模型列表……</div>}
+              {modelList !== null && modelList.length === 0 && (
+                <div className="dsh-pet-sprite-set-note">没有可用模型：先在 DSH 设置里配置一个模型服务商。</div>
+              )}
+              {modelList !== null && modelList.length > 0 && (
+                <>
+                  <label>服务商</label>
+                  <select
+                    value={chatModel?.provider ?? ''}
+                    onChange={(e) => {
+                      const p = modelList.find(m => m.id === e.target.value)
+                      // auto-pick the provider's first model so the choice is always complete
+                      onChatModelChange(p && p.models.length > 0 ? { provider: p.id, model: p.models[0].id } : null)
+                    }}
+                  >
+                    <option value="" disabled={chatModel !== null}>选择服务商</option>
+                    {modelList.map(p => <option key={p.id} value={p.id}>{p.name}（{p.id}）</option>)}
+                  </select>
+                  {chatModel !== null && (() => {
+                    const p = modelList.find(m => m.id === chatModel.provider)
+                    return p ? (
+                      <>
+                        <label>模型</label>
+                        <select
+                          value={chatModel.model}
+                          onChange={(e) => onChatModelChange({ provider: chatModel.provider, model: e.target.value })}
+                        >
+                          {p.models.map(m => <option key={m.id} value={m.id}>{m.name === m.id ? m.id : `${m.name}（${m.id}）`}</option>)}
+                        </select>
+                        <div className="dsh-pet-sprite-set-note">当前：{chatModel.provider} / {chatModel.model}</div>
+                      </>
+                    ) : (
+                      <div className="dsh-pet-sprite-set-note">已保存的服务商不在当前列表里，重新选一个吧。</div>
+                    )
+                  })()}
+                </>
+              )}
+              <h4>形象</h4>
+              <button className="dsh-pet-sprite-btn dsh-pet-sprite-switch" onClick={onSwitchPet}>更换形象</button>
             </div>
           )}
         </div>
