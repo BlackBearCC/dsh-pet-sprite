@@ -1,7 +1,7 @@
 {
   "name": "dsh-pet-sprite",
-  "version": "0.1.0",
-  "description": "A playable pixel companion for the DeepSeek Harness Web UI: platform-jumps over chat messages, WASD controllable, with a full nurture system (mood/power/health, levels, shop, inventory) fed by your agent's real token usage.",
+  "version": "0.2.0",
+  "description": "A playable pixel companion for the DeepSeek Harness Web UI: hatch an egg and pick one of three companions (girl / tabby cat / baby whale), platform-jump over chat messages, WASD controllable, with a full nurture system (mood/power/health, levels, shop, inventory) fed by your agent's real token usage.",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",

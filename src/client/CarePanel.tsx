@@ -9,6 +9,8 @@ import type { MiniEngine } from './game/mini-engine.ts'
 interface Props {
   engine: MiniEngine
   anchor: { x: number; y: number } // pet screen position (panel opens beside it)
+  petName: string // active companion name (header + switch button)
+  onSwitchPet: () => void // reopen the companion picker
   onClose: () => void
 }
 
@@ -68,13 +70,14 @@ function injectPanelStyles(): void {
 .dsh-pet-sprite-buy{flex:none;border:1.5px solid #2a2f3e;border-radius:6px;padding:2.5px 8px;font-size:10.5px;font-weight:800;cursor:pointer;background:#ffd33d;color:#1f2430;font-family:inherit}
 .dsh-pet-sprite-buy:disabled{opacity:.35;cursor:not-allowed}
 .dsh-pet-sprite-buy:not(:disabled):active{transform:scale(.94)}
+.dsh-pet-sprite-switch{display:block;width:100%;margin-top:12px;color:#6b7280;background:#fff}
 .dsh-pet-sprite-toast{position:fixed;z-index:960;background:#1f2430;color:#fff;font-size:12px;padding:7px 13px;border-radius:9px;box-shadow:0 4px 0 rgba(0,0,0,.2);animation:dshPetSpriteToast 2.6s ease forwards;max-width:260px}
 @keyframes dshPetSpriteToast{from{opacity:0;transform:translateY(8px)}10%,80%{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-6px)}}
 `
   document.head.appendChild(s)
 }
 
-export const CarePanel: FC<Props> = ({ engine, anchor, onClose }) => {
+export const CarePanel: FC<Props> = ({ engine, anchor, petName, onSwitchPet, onClose }) => {
   const [, bump] = useState(0)
   const [tab, setTab] = useState<'status' | 'bag' | 'shop'>('status')
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
@@ -141,7 +144,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, onClose }) => {
     <>
       <div className="dsh-pet-sprite-panel" role="dialog" aria-label="Pet 照顾面板" style={{ left: px, top: py }}>
         <div className="dsh-pet-sprite-panel-hd">
-          Pet <span className="sub">Lv.{stats.level} {stats.title}</span>
+          {petName} <span className="sub">Lv.{stats.level} {stats.title}</span>
           <span className="coins">🪙 {stats.coins}</span>
           <button className="dsh-pet-sprite-panel-x" onClick={onClose} aria-label="关闭">✕</button>
         </div>
@@ -180,6 +183,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, onClose }) => {
                   <button className="dsh-pet-sprite-btn" onClick={doRest}>睡一会</button>
                 </div>
               </div>
+              <button className="dsh-pet-sprite-btn dsh-pet-sprite-switch" onClick={onSwitchPet}>更换形象</button>
             </>
           )}
           {tab === 'bag' && (

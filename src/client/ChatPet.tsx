@@ -1,15 +1,29 @@
 import { useEffect, useRef, useState, type FC } from 'react'
 import { MiniEngine } from './game/mini-engine.ts'
 import { CarePanel } from './CarePanel.tsx'
+import { PetPicker } from './PetPicker.tsx'
+import { drawPet, EGG_ROWS, PET_ART, PET_IDS, PET_META, type Frames, type PetId } from './pet-art.ts'
 
 // Pet pixel companion, ported from the terminal-web project.
-// A 24x28 hand-written pixel character (white long hair / sleepy eyes /
-// white shirt + red tie / brown pleated skirt) drawn on canvas, no images.
-// The conversation's message nodes are platforms: the pet wanders, jumps
-// and climbs them on its own; clicking the chat background hands over
-// WASD/space control for 10s. Clicking the pet = +1 combo with a skill
-// jump and gold particle burst. Right-click the pet opens the care panel
-// (PetClaw gameplay systems: attributes / level / care / shop / rewards).
+// Three selectable companions (see pet-art.ts): Poka the original girl,
+// Mikan the tabby cat, Puff the baby whale — each a 24x28 hand-written
+// sprite drawn on canvas, no images. The conversation's message nodes
+// are platforms: the pet wanders, jumps and climbs them on its own;
+// clicking the chat background hands over WASD/space control for 10s.
+// Clicking the pet = +1 combo with a skill jump and gold particle burst.
+// Right-click the pet opens the care panel (PetClaw gameplay systems:
+// attributes / level / care / shop / rewards) and the companion picker.
+
+const PET_ID_KEY = 'dshPetSpriteGame:petId'
+function loadPetId(): PetId | null {
+  try {
+    const v = localStorage.getItem(PET_ID_KEY)
+    return PET_IDS.includes(v as PetId) ? (v as PetId) : null
+  } catch { return null }
+}
+function savePetId(id: PetId): void {
+  try { localStorage.setItem(PET_ID_KEY, id) } catch { /* ignore */ }
+}
 
 // Engine singleton: gameplay state lives in localStorage, one instance
 // survives React StrictMode remounts.
@@ -40,97 +54,6 @@ function pick(pool: readonly string[]): string {
   return pool[Math.floor(Math.random() * pool.length)]
 }
 
-// ── pixel art (verbatim from terminal-web) ──────────────────────────────────
-const PAL: Record<string, string> = {
-  o: '#4a4553', h: '#f6f7fc', H: '#dcdff0', s: '#ffe9dc', S: '#f2cdb9',
-  e: '#3c3744', X: '#ffffff', w: '#ffffff', t: '#e8434e', T: '#b32832',
-  k: '#9c6640', K: '#7d4e2c', b: '#ffb3ae', m: '#e8927c', l: '#39496b',
-  g: '#8fd0ff', z: '#8fa3c8',
-}
-const BASE = [
-  '........oooooooo........',
-  '......oohhhhhhhhoo......',
-  '.....ohhhhhhhhhhhho.....',
-  '....ohhhhhhhhhhhhhho....',
-  '...ohhhhhhhhhhhhhhhho...',
-  '..ohhhhhhhhhhhhhhhhhho..',
-  '..ohhhhhhhhhhhhhhhhhho..',
-  '..ohhHhsssssssssshHhho..',
-  '..ohhsssssssssssssshho..',
-  '..ohsseXessssseXesshho..',
-  '..ohsseeessssseeesshho..',
-  '..ohsbsssssssssssbshho..',
-  '..ohssssssmmssssssshho..',
-  '...ohhsssssssssssshho...',
-  '....ohhsssssssssshho....',
-  '..ohho..osssso..ohho....',
-  '..ohho.owwwwwwo.ohho....',
-  '..ohhoowwwttwwwoohho....',
-  '..ohHo.swwtTws..oHho....',
-  '...oho.okkkkkko..oho....',
-  '...oo.okkkkkkkko..oo....',
-  '......okkkkkkkkko.......',
-  '.....okKkKkKkKkKko......',
-  '.....oKKKKKKKKKKKo......',
-  '........ss....ss........',
-  '........ss....ss........',
-  '.......oss....sso.......',
-  '.......ooo....ooo.......',
-]
-function repl(rows: string[], edits: Record<number, string>): string[] {
-  const c = rows.slice()
-  for (const k in edits) c[+k] = edits[k]
-  return c
-}
-function closedEyes(rows: string[]): string[] {
-  const c = rows.slice()
-  c[9] = c[9].replace(/[eX]/g, 's')
-  c[10] = c[10].replace(/e/g, 'S')
-  return c
-}
-const F = {
-  I: BASE,
-  B: ['........................'].concat(BASE.slice(0, 16), BASE.slice(17)),
-  BL: closedEyes(BASE),
-  ZZ: repl(closedEyes(['........................'].concat(BASE.slice(0, 16), BASE.slice(17))), {
-    1: '......oohhhhhhhhoo...z..',
-    2: '.....ohhhhhhhhhhhho.z...',
-    3: '....ohhhhhhhhhhhhhho..z.',
-  }),
-  WA: repl(BASE, { 19: '...oho.ollllllo..oho....' }),
-  WB: repl(repl(BASE, { 19: '...oho.ollllllo..oho....' }), {
-    18: '..ohHo..wwtTw...oHho....',
-    16: '..ohho.owwwwwwo.ohho..g.',
-  }),
-  KA: repl(BASE, {
-    24: '.......ss......ss.......', 25: '.......ss......ss.......',
-    26: '......oss......sso......', 27: '......ooo......ooo......',
-  }),
-  KB: repl(BASE, {
-    24: '.........ss..ss.........', 25: '.........ss..ss.........',
-    26: '........oss..sso........', 27: '........ooo..ooo........',
-  }),
-  JP: repl(BASE, {
-    24: '.........ss..ss.........', 25: '........oss..sso........',
-    26: '........ooo..ooo........', 27: '........................',
-  }),
-}
-function drawPet(cv: HTMLCanvasElement, rows: string[]): void {
-  const sc = cv.width / 24
-  const x = cv.getContext('2d')
-  if (!x) return
-  x.clearRect(0, 0, cv.width, cv.height)
-  for (let y = 0; y < rows.length; y++) {
-    const r = rows[y]
-    for (let i = 0; i < 24; i++) {
-      const ch = r[i]
-      if (ch === '.' || ch === undefined) continue
-      x.fillStyle = PAL[ch] ?? '#f0f'
-      x.fillRect(i * sc, y * sc, sc, sc)
-    }
-  }
-}
-
 // ── styles ───────────────────────────────────────────────────────────────────
 let styleInjected = false
 function injectStyles(): void {
@@ -157,7 +80,17 @@ function injectStyles(): void {
 .dsh-pet-sprite-dragging canvas{animation:dshPetSpriteHang .8s ease-in-out infinite alternate}
 @keyframes dshPetSpriteHang{from{transform:rotate(-8deg) scale(1.1)}to{transform:rotate(8deg) scale(1.1)}}
 .dsh-pet-sprite-status{position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);z-index:6;font:800 9.5px ui-monospace,Menlo,Consolas,monospace;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.14);border-radius:999px;padding:1px 8px;color:#7b8190;pointer-events:none;white-space:nowrap;box-shadow:0 2px 0 rgba(0,0,0,.10)}
-@media (prefers-reduced-motion:reduce){.dsh-pet-sprite-plus{animation-duration:.4s}}
+.dsh-pet-sprite-egg{position:absolute;right:28px;bottom:34px;width:40px;height:47px;pointer-events:auto;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 2.5px 0 rgba(0,0,0,.13));animation:dshPetSpriteEggIn .6s cubic-bezier(.2,1.7,.4,1) both}
+.dsh-pet-sprite-egg canvas{width:100%;height:100%;image-rendering:pixelated;display:block;animation:dshPetSpriteEggWobble 4.8s ease-in-out infinite;transform-origin:50% 92%}
+@keyframes dshPetSpriteEggIn{from{opacity:0;transform:translateY(18px) scale(.5)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes dshPetSpriteEggWobble{0%,66%,100%{transform:rotate(0)}70%{transform:rotate(-7deg)}74%{transform:rotate(6deg)}78%{transform:rotate(-4deg)}82%{transform:rotate(1.5deg)}86%{transform:rotate(0)}89%{transform:rotate(0) translateY(-2px)}91%{transform:rotate(0) translateY(0)}}
+.dsh-pet-sprite-egg:hover{filter:drop-shadow(0 5px 7px rgba(0,0,0,.2))}
+.dsh-pet-sprite-egg:hover canvas{animation:none;transform:rotate(-6deg) scale(1.08)}
+.dsh-pet-sprite-egg:active canvas{transform:rotate(-9deg) scale(.96)}
+.dsh-pet-sprite-egg-hint{position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);background:#fff;border:2.5px solid #4a4553;border-radius:12px;padding:3px 11px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#4a4553;white-space:nowrap;pointer-events:none;box-shadow:0 2.5px 0 rgba(0,0,0,.15);animation:dshPetSpriteEggHint .5s cubic-bezier(.2,1.7,.4,1) both}
+.dsh-pet-sprite-egg-hint::after{content:'';position:absolute;top:calc(100% - 6.5px);left:50%;width:11px;height:11px;background:#fff;border-right:2.5px solid #4a4553;border-bottom:2.5px solid #4a4553;transform:translateX(-50%) rotate(45deg)}
+@keyframes dshPetSpriteEggHint{from{opacity:0;transform:translateX(-50%) translateY(8px) scale(.55)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+@media (prefers-reduced-motion:reduce){.dsh-pet-sprite-plus{animation-duration:.4s}.dsh-pet-sprite-egg{animation-duration:.01s}.dsh-pet-sprite-egg canvas{animation:none}.dsh-pet-sprite-egg-hint{animation-duration:.01s}}
 `
   document.head.appendChild(style)
 }
@@ -166,14 +99,49 @@ export const ChatPet: FC = () => {
   const layerRef = useRef<HTMLDivElement>(null)
   const unitRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const eggCanvasRef = useRef<HTMLCanvasElement>(null)
   const countRef = useRef<HTMLSpanElement>(null)
   const ctlRef = useRef<HTMLSpanElement>(null)
   const statusRef = useRef<HTMLSpanElement>(null)
+  // null until a companion is chosen: a quiet egg sits in the corner
+  // instead — clicking it (never auto-popup) opens the picker
+  const [petId, setPetId] = useState<PetId | null>(() => loadPetId())
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [anchor, setAnchor] = useState({ x: 0, y: 0 })
+  const [eggHint, setEggHint] = useState(false)
   const engine = getEngine()
 
+  const handlePick = (id: PetId): void => {
+    savePetId(id)
+    setPickerOpen(false)
+    setPetId(id)
+  }
+  const openPicker = (): void => {
+    setPanelOpen(false)
+    setPickerOpen(true)
+  }
+
+  // pre-hatch egg sprite: redraw on every remount (the egg unmounts
+  // while the picker overlay is open and comes back after close)
   useEffect(() => {
+    if (petId || pickerOpen) return
+    const cv = eggCanvasRef.current
+    if (cv) drawPet(cv, EGG_ROWS)
+  }, [petId, pickerOpen])
+
+  // one-off hint bubble ("knock knock?") a few seconds after first
+  // launch — discoverable without being intrusive, never repeats
+  useEffect(() => {
+    if (petId) return
+    const t1 = setTimeout(() => setEggHint(true), 4500)
+    const t2 = setTimeout(() => setEggHint(false), 11000)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [petId])
+
+  useEffect(() => {
+    if (!petId) return
+    const art: Frames = PET_ART[petId]
     injectStyles()
     const layer = layerRef.current
     const unit = unitRef.current
@@ -357,14 +325,14 @@ export const ChatPet: FC = () => {
     }
 
     function frameFor(): string[] {
-      if (dragging) return F.JP
-      if (state === 'air') return F.JP
-      if (state === 'climb') return ft % 2 ? F.KA : F.KB
-      if (moving || (goal && Math.abs(goal.x - x) > 3)) return ft % 4 < 2 ? F.KA : F.KB
-      if (mode === 'work') return ft % 6 < 3 ? F.WA : F.WB
-      if (ft % 50 === 9) return F.BL
-      if (ft % 140 >= 124) return ft % 10 < 5 ? F.ZZ : F.B
-      return ft % 10 < 5 ? F.I : F.B
+      if (dragging) return art.JP
+      if (state === 'air') return art.JP
+      if (state === 'climb') return ft % 2 ? art.KA : art.KB
+      if (moving || (goal && Math.abs(goal.x - x) > 3)) return ft % 4 < 2 ? art.KA : art.KB
+      if (mode === 'work') return ft % 6 < 3 ? art.WA : art.WB
+      if (ft % 50 === 9) return art.BL
+      if (ft % 140 >= 124) return ft % 10 < 5 ? art.ZZ : art.B
+      return ft % 10 < 5 ? art.I : art.B
     }
 
     let raf = 0
@@ -391,7 +359,9 @@ export const ChatPet: FC = () => {
           if (nextChatAt === 0) nextChatAt = now + 15000 + Math.random() * 15000
           else if (now > nextChatAt) {
             const s = engine.getStats()
-            say(s.power < 30 || s.mood < 30 ? pick(CHAT_LINES.low) : pick(CHAT_LINES.idle))
+            say(s.power < 30 || s.mood < 30
+              ? pick(CHAT_LINES.low)
+              : pick([...CHAT_LINES.idle, ...PET_META[petId].idleLines]))
             nextChatAt = now + 24000 + Math.random() * 20000
           }
         }
@@ -578,7 +548,7 @@ export const ChatPet: FC = () => {
     unit.addEventListener('pointercancel', onUnitPointerUp)
     if (ctlHint) ctlHint.style.display = 'none'
 
-    drawPet(cv, F.I)
+    drawPet(cv, art.I)
     if (!still) requestAnimationFrame((t) => { lastT = t; requestAnimationFrame(tick) })
     else {
       // reduced motion: still draw frames slowly, no physics takeover
@@ -619,17 +589,35 @@ export const ChatPet: FC = () => {
       unit.removeEventListener('pointerup', onUnitPointerUp)
       unit.removeEventListener('pointercancel', onUnitPointerUp)
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [petId])
 
   return (
     <div ref={layerRef} className="dsh-pet-sprite-layer">
-      <div ref={unitRef} className="dsh-pet-sprite-unit" title="Pet（右键打开照顾面板）">
-        <span ref={countRef} className="dsh-pet-sprite-count" />
-        <span ref={ctlRef} className="dsh-pet-sprite-ctl" />
-        <canvas ref={canvasRef} width={96} height={112} />
-        <span ref={statusRef} className="dsh-pet-sprite-status" />
-      </div>
-      {panelOpen && <CarePanel engine={engine} anchor={anchor} onClose={() => setPanelOpen(false)} />}
+      {petId && (
+        <div ref={unitRef} className="dsh-pet-sprite-unit" title={`${PET_META[petId].name}（右键打开照顾面板）`}>
+          <span ref={countRef} className="dsh-pet-sprite-count" />
+          <span ref={ctlRef} className="dsh-pet-sprite-ctl" />
+          <canvas ref={canvasRef} width={96} height={112} />
+          <span ref={statusRef} className="dsh-pet-sprite-status" />
+        </div>
+      )}
+      {!petId && !pickerOpen && (
+        <div
+          className="dsh-pet-sprite-egg"
+          title="点一点，看看谁在里面"
+          onClick={() => setPickerOpen(true)}
+        >
+          <canvas ref={eggCanvasRef} width={96} height={112} />
+          {eggHint && <span className="dsh-pet-sprite-egg-hint">咔……咔？</span>}
+        </div>
+      )}
+      {petId && panelOpen && (
+        <CarePanel engine={engine} anchor={anchor} petName={PET_META[petId].name} onSwitchPet={openPicker} onClose={() => setPanelOpen(false)} />
+      )}
+      {pickerOpen && (
+        <PetPicker currentId={petId} onPick={handlePick} onClose={() => setPickerOpen(false)} />
+      )}
     </div>
   )
 }
