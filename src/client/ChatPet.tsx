@@ -475,7 +475,9 @@ export const ChatPet: FC = () => {
       e.preventDefault()
       e.stopImmediatePropagation()
       lastKeyAt = performance.now()
-      showCtlHint()
+      // only light the hint on fresh presses; OS key-repeat would keep
+      // resetting the fade timer and pin the pill while walking
+      if (!e.repeat) showCtlHint()
       if (k === 'sp' && !keys.sp) {
         if (state === 'ground') { vy = JUMPV; state = 'air'; airJumped = false; goal = null; climb = null }
         else if (state === 'air' && !airJumped) { airJumped = true; vy = Math.max(vy, SKILLV * .85); burst() }
