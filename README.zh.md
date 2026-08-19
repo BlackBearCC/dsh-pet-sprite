@@ -1,4 +1,4 @@
-# dsh-pet
+# dsh-pet-sprite
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）Web UI 的**可玩**像素桌宠插件。
 
@@ -18,7 +18,7 @@
 ## 安装
 
 ```sh
-dsh plugin --profile web add github:<your-account>/dsh-pet
+dsh plugin --profile web add github:<your-account>/dsh-pet-sprite
 ```
 
 重启 DSH（`dsh web`），打开任意会话——桌宠会出现在聊天流底部。
@@ -33,7 +33,7 @@ dsh plugin --profile web add github:<your-account>/dsh-pet
 
 ## 兼容性
 
-- DSH developer preview（基于 `0.1.0-rc.7` 测试）。DSH 迭代很快、存在破坏性变更；如需稳定请锁定 commit（`github:<you>/dsh-pet#<sha>`）。
+- DSH developer preview（基于 `0.1.0-rc.7` 测试）。DSH 迭代很快、存在破坏性变更；如需稳定请锁定 commit（`github:<you>/dsh-pet-sprite#<sha>`）。
 
 ## 许可
 

@@ -4,7 +4,7 @@
 
 import type { PersistenceStore } from './attribute-engine.ts'
 
-const PREFIX = 'dshPetGame:'
+const PREFIX = 'dshPetSpriteGame:'
 
 export function createLocalStore(): PersistenceStore {
   return {

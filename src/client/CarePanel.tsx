@@ -35,41 +35,41 @@ function injectPanelStyles(): void {
   panelStyleInjected = true
   const s = document.createElement('style')
   s.textContent = `
-.dsh-pet-panel{position:fixed;z-index:950;width:260px;max-height:min(60vh,460px);display:flex;flex-direction:column;background:#ffffff;border:2px solid #2a2f3e;border-radius:12px;box-shadow:0 5px 0 rgba(0,0,0,.16),0 14px 32px rgba(0,0,0,.18);overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;pointer-events:auto}
-.dsh-pet-panel-hd{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:2px solid #2a2f3e;font-size:12px;font-weight:800;color:#1f2430}
-.dsh-pet-panel-hd .sub{font-weight:600;font-size:10.5px;color:#6b7280}
-.dsh-pet-panel-hd .coins{margin-left:auto;font-weight:800;font-size:11px;color:#b8860b;white-space:nowrap}
-.dsh-pet-panel-x{border:none;background:transparent;font-size:13px;cursor:pointer;color:#6b7280;padding:2px 5px;border-radius:6px;line-height:1}
-.dsh-pet-panel-x:hover{background:#eef0f4;color:#1f2430}
-.dsh-pet-tabs{display:flex;border-bottom:1px solid #e5e7eb}
-.dsh-pet-tab{flex:1;border:none;background:transparent;padding:6px 0;font-size:11px;font-weight:700;color:#6b7280;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
-.dsh-pet-tab.on{color:#1f2430;border-bottom-color:#4f6ef7}
-.dsh-pet-tab:hover{color:#1f2430}
-.dsh-pet-panel-bd{overflow-y:auto;padding:8px 12px 12px;font-size:12px}
-.dsh-pet-panel-bd::-webkit-scrollbar{width:5px}
-.dsh-pet-panel-bd::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:999px}
-.dsh-pet-row{display:flex;align-items:center;gap:8px;margin:6px 0}
-.dsh-pet-row label{width:30px;flex:none;color:#6b7280;font-size:11px}
-.dsh-pet-bar{flex:1;height:8px;border-radius:999px;background:#e5e7eb;overflow:hidden}
-.dsh-pet-bar i{display:block;height:100%;border-radius:999px;transition:width .5s cubic-bezier(.2,.8,.4,1)}
-.dsh-pet-row b{width:78px;flex:none;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;font-size:10.5px;color:#1f2430}
-.dsh-pet-exp .cap{display:flex;justify-content:space-between;color:#6b7280;font-size:10.5px;margin:8px 0 3px}
-.dsh-pet-sec h4{margin:10px 0 5px;font-size:10px;color:#6b7280;font-weight:800;letter-spacing:.5px}
-.dsh-pet-acts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
-.dsh-pet-btn{border:1.5px solid #2a2f3e;background:#f6f7fa;border-radius:8px;padding:6px 2px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:#1f2430;transition:transform .12s,background .12s}
-.dsh-pet-btn:hover{background:#eef0f4}
-.dsh-pet-btn:active{transform:scale(.94)}
-.dsh-pet-btn:disabled{opacity:.4;cursor:not-allowed}
-.dsh-pet-item{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:8px;border:1.5px solid #e5e7eb;margin-bottom:5px;background:#fff}
-.dsh-pet-item .ic{font-size:14px;flex:none}
-.dsh-pet-item .nm{font-weight:700;flex:none;font-size:11.5px;color:#1f2430;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dsh-pet-item .fx{color:#6b7280;flex:1;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dsh-pet-item .qty{flex:none;font-variant-numeric:tabular-nums;color:#6b7280;font-size:10.5px}
-.dsh-pet-buy{flex:none;border:1.5px solid #2a2f3e;border-radius:6px;padding:2.5px 8px;font-size:10.5px;font-weight:800;cursor:pointer;background:#ffd33d;color:#1f2430;font-family:inherit}
-.dsh-pet-buy:disabled{opacity:.35;cursor:not-allowed}
-.dsh-pet-buy:not(:disabled):active{transform:scale(.94)}
-.dsh-pet-toast{position:fixed;z-index:960;background:#1f2430;color:#fff;font-size:12px;padding:7px 13px;border-radius:9px;box-shadow:0 4px 0 rgba(0,0,0,.2);animation:dshPetToast 2.6s ease forwards;max-width:260px}
-@keyframes dshPetToast{from{opacity:0;transform:translateY(8px)}10%,80%{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-6px)}}
+.dsh-pet-sprite-panel{position:fixed;z-index:950;width:260px;max-height:min(60vh,460px);display:flex;flex-direction:column;background:#ffffff;border:2px solid #2a2f3e;border-radius:12px;box-shadow:0 5px 0 rgba(0,0,0,.16),0 14px 32px rgba(0,0,0,.18);overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;pointer-events:auto}
+.dsh-pet-sprite-panel-hd{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:2px solid #2a2f3e;font-size:12px;font-weight:800;color:#1f2430}
+.dsh-pet-sprite-panel-hd .sub{font-weight:600;font-size:10.5px;color:#6b7280}
+.dsh-pet-sprite-panel-hd .coins{margin-left:auto;font-weight:800;font-size:11px;color:#b8860b;white-space:nowrap}
+.dsh-pet-sprite-panel-x{border:none;background:transparent;font-size:13px;cursor:pointer;color:#6b7280;padding:2px 5px;border-radius:6px;line-height:1}
+.dsh-pet-sprite-panel-x:hover{background:#eef0f4;color:#1f2430}
+.dsh-pet-sprite-tabs{display:flex;border-bottom:1px solid #e5e7eb}
+.dsh-pet-sprite-tab{flex:1;border:none;background:transparent;padding:6px 0;font-size:11px;font-weight:700;color:#6b7280;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
+.dsh-pet-sprite-tab.on{color:#1f2430;border-bottom-color:#4f6ef7}
+.dsh-pet-sprite-tab:hover{color:#1f2430}
+.dsh-pet-sprite-panel-bd{overflow-y:auto;padding:8px 12px 12px;font-size:12px}
+.dsh-pet-sprite-panel-bd::-webkit-scrollbar{width:5px}
+.dsh-pet-sprite-panel-bd::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:999px}
+.dsh-pet-sprite-row{display:flex;align-items:center;gap:8px;margin:6px 0}
+.dsh-pet-sprite-row label{width:30px;flex:none;color:#6b7280;font-size:11px}
+.dsh-pet-sprite-bar{flex:1;height:8px;border-radius:999px;background:#e5e7eb;overflow:hidden}
+.dsh-pet-sprite-bar i{display:block;height:100%;border-radius:999px;transition:width .5s cubic-bezier(.2,.8,.4,1)}
+.dsh-pet-sprite-row b{width:78px;flex:none;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;font-size:10.5px;color:#1f2430}
+.dsh-pet-sprite-exp .cap{display:flex;justify-content:space-between;color:#6b7280;font-size:10.5px;margin:8px 0 3px}
+.dsh-pet-sprite-sec h4{margin:10px 0 5px;font-size:10px;color:#6b7280;font-weight:800;letter-spacing:.5px}
+.dsh-pet-sprite-acts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+.dsh-pet-sprite-btn{border:1.5px solid #2a2f3e;background:#f6f7fa;border-radius:8px;padding:6px 2px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:#1f2430;transition:transform .12s,background .12s}
+.dsh-pet-sprite-btn:hover{background:#eef0f4}
+.dsh-pet-sprite-btn:active{transform:scale(.94)}
+.dsh-pet-sprite-btn:disabled{opacity:.4;cursor:not-allowed}
+.dsh-pet-sprite-item{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:8px;border:1.5px solid #e5e7eb;margin-bottom:5px;background:#fff}
+.dsh-pet-sprite-item .ic{font-size:14px;flex:none}
+.dsh-pet-sprite-item .nm{font-weight:700;flex:none;font-size:11.5px;color:#1f2430;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-pet-sprite-item .fx{color:#6b7280;flex:1;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-pet-sprite-item .qty{flex:none;font-variant-numeric:tabular-nums;color:#6b7280;font-size:10.5px}
+.dsh-pet-sprite-buy{flex:none;border:1.5px solid #2a2f3e;border-radius:6px;padding:2.5px 8px;font-size:10.5px;font-weight:800;cursor:pointer;background:#ffd33d;color:#1f2430;font-family:inherit}
+.dsh-pet-sprite-buy:disabled{opacity:.35;cursor:not-allowed}
+.dsh-pet-sprite-buy:not(:disabled):active{transform:scale(.94)}
+.dsh-pet-sprite-toast{position:fixed;z-index:960;background:#1f2430;color:#fff;font-size:12px;padding:7px 13px;border-radius:9px;box-shadow:0 4px 0 rgba(0,0,0,.2);animation:dshPetSpriteToast 2.6s ease forwards;max-width:260px}
+@keyframes dshPetSpriteToast{from{opacity:0;transform:translateY(8px)}10%,80%{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-6px)}}
 `
   document.head.appendChild(s)
 }
@@ -139,71 +139,71 @@ export const CarePanel: FC<Props> = ({ engine, anchor, onClose }) => {
 
   return (
     <>
-      <div className="dsh-pet-panel" role="dialog" aria-label="Pet 照顾面板" style={{ left: px, top: py }}>
-        <div className="dsh-pet-panel-hd">
+      <div className="dsh-pet-sprite-panel" role="dialog" aria-label="Pet 照顾面板" style={{ left: px, top: py }}>
+        <div className="dsh-pet-sprite-panel-hd">
           Pet <span className="sub">Lv.{stats.level} {stats.title}</span>
           <span className="coins">🪙 {stats.coins}</span>
-          <button className="dsh-pet-panel-x" onClick={onClose} aria-label="关闭">✕</button>
+          <button className="dsh-pet-sprite-panel-x" onClick={onClose} aria-label="关闭">✕</button>
         </div>
-        <div className="dsh-pet-tabs">
-          <button className={`dsh-pet-tab ${tab === 'status' ? 'on' : ''}`} onClick={() => setTab('status')}>状态</button>
-          <button className={`dsh-pet-tab ${tab === 'bag' ? 'on' : ''}`} onClick={() => setTab('bag')}>背包</button>
-          <button className={`dsh-pet-tab ${tab === 'shop' ? 'on' : ''}`} onClick={() => setTab('shop')}>商店</button>
+        <div className="dsh-pet-sprite-tabs">
+          <button className={`dsh-pet-sprite-tab ${tab === 'status' ? 'on' : ''}`} onClick={() => setTab('status')}>状态</button>
+          <button className={`dsh-pet-sprite-tab ${tab === 'bag' ? 'on' : ''}`} onClick={() => setTab('bag')}>背包</button>
+          <button className={`dsh-pet-sprite-tab ${tab === 'shop' ? 'on' : ''}`} onClick={() => setTab('shop')}>商店</button>
         </div>
-        <div className="dsh-pet-panel-bd">
+        <div className="dsh-pet-sprite-panel-bd">
           {tab === 'status' && (
             <>
-              <div className="dsh-pet-row">
+              <div className="dsh-pet-sprite-row">
                 <label>心情</label>
-                <div className="dsh-pet-bar"><i style={{ width: `${stats.mood}%`, background: barColor(stats.moodLevel) }} /></div>
+                <div className="dsh-pet-sprite-bar"><i style={{ width: `${stats.mood}%`, background: barColor(stats.moodLevel) }} /></div>
                 <b>{stats.mood} {LEVEL_NAMES[stats.moodLevel] ?? stats.moodLevel}</b>
               </div>
-              <div className="dsh-pet-row">
+              <div className="dsh-pet-sprite-row">
                 <label>电量</label>
-                <div className="dsh-pet-bar"><i style={{ width: `${Math.min(100, stats.power / 3)}%`, background: barColor(stats.powerLevel) }} /></div>
+                <div className="dsh-pet-sprite-bar"><i style={{ width: `${Math.min(100, stats.power / 3)}%`, background: barColor(stats.powerLevel) }} /></div>
                 <b>{stats.power} {LEVEL_NAMES[stats.powerLevel] ?? stats.powerLevel}</b>
               </div>
-              <div className="dsh-pet-row">
+              <div className="dsh-pet-sprite-row">
                 <label>健康</label>
-                <div className="dsh-pet-bar"><i style={{ width: `${stats.health}%`, background: barColor(stats.healthLevel) }} /></div>
+                <div className="dsh-pet-sprite-bar"><i style={{ width: `${stats.health}%`, background: barColor(stats.healthLevel) }} /></div>
                 <b>{stats.health} {LEVEL_NAMES[stats.healthLevel] ?? stats.healthLevel}</b>
               </div>
-              <div className="dsh-pet-exp">
+              <div className="dsh-pet-sprite-exp">
                 <div className="cap"><span>经验 → Lv.{stats.level + 1}</span><span>{expPct}%</span></div>
-                <div className="dsh-pet-bar"><i style={{ width: `${expPct}%`, background: '#4f6ef7' }} /></div>
+                <div className="dsh-pet-sprite-bar"><i style={{ width: `${expPct}%`, background: '#4f6ef7' }} /></div>
               </div>
-              <div className="dsh-pet-sec">
+              <div className="dsh-pet-sprite-sec">
                 <h4>互动</h4>
-                <div className="dsh-pet-acts">
-                  <button className="dsh-pet-btn" onClick={() => doPlay('hide_seek')}>捉迷藏</button>
-                  <button className="dsh-pet-btn" onClick={() => doPlay('sunbathe')}>晒太阳</button>
-                  <button className="dsh-pet-btn" onClick={doRest}>睡一会</button>
+                <div className="dsh-pet-sprite-acts">
+                  <button className="dsh-pet-sprite-btn" onClick={() => doPlay('hide_seek')}>捉迷藏</button>
+                  <button className="dsh-pet-sprite-btn" onClick={() => doPlay('sunbathe')}>晒太阳</button>
+                  <button className="dsh-pet-sprite-btn" onClick={doRest}>睡一会</button>
                 </div>
               </div>
             </>
           )}
           {tab === 'bag' && (
-            <div className="dsh-pet-sec">
+            <div className="dsh-pet-sprite-sec">
               {inv.length === 0 && <div style={{ color: '#6b7280', fontSize: 11 }}>背包空空的，去「商店」补货</div>}
               {inv.map((it) => (
-                <div key={it.itemId} className="dsh-pet-item">
+                <div key={it.itemId} className="dsh-pet-sprite-item">
                   <span className="ic">{it.def.icon}</span>
                   <span className="nm">{it.def.name}</span>
                   <span className="fx">{CAT_NAMES[it.def.category] ?? it.def.category}</span>
                   <span className="qty">×{it.quantity < 0 ? '∞' : it.quantity}</span>
-                  <button className="dsh-pet-buy" disabled={!it.canUse} onClick={() => doUse(it.itemId)}>使用</button>
+                  <button className="dsh-pet-sprite-buy" disabled={!it.canUse} onClick={() => doUse(it.itemId)}>使用</button>
                 </div>
               ))}
             </div>
           )}
           {tab === 'shop' && (
-            <div className="dsh-pet-sec">
+            <div className="dsh-pet-sprite-sec">
               {shop.map((it) => (
-                <div key={it.id} className="dsh-pet-item">
+                <div key={it.id} className="dsh-pet-sprite-item">
                   <span className="ic">{it.icon}</span>
                   <span className="nm">{it.name}</span>
                   <span className="qty">🪙{it.price}</span>
-                  <button className="dsh-pet-buy" disabled={!it.canBuy} onClick={() => doBuy(it.id)}>购买</button>
+                  <button className="dsh-pet-sprite-buy" disabled={!it.canBuy} onClick={() => doBuy(it.id)}>购买</button>
                 </div>
               ))}
             </div>
@@ -213,7 +213,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, onClose }) => {
       {toast && (
         <div
           key={toast.id}
-          className="dsh-pet-toast"
+          className="dsh-pet-sprite-toast"
           style={{ left: px, top: py - 34 }}
         >
           {toast.text}

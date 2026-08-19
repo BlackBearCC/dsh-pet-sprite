@@ -121,18 +121,18 @@ function injectStyles(): void {
   styleInjected = true
   const style = document.createElement('style')
   style.textContent = `
-.dsh-pet-layer{position:fixed;inset:0;z-index:900;pointer-events:none}
-.dsh-pet-unit{position:absolute;width:48px;height:56px;pointer-events:auto;cursor:pointer;filter:drop-shadow(0 2px 0 rgba(0,0,0,.12));opacity:.97;user-select:none;-webkit-tap-highlight-color:transparent}
-.dsh-pet-unit canvas{width:100%;height:100%;image-rendering:pixelated;display:block}
-.dsh-pet-plus{position:absolute;left:50%;top:-15px;transform:translateX(-50%);z-index:6;font:900 16px ui-monospace,Menlo,Consolas,monospace;color:#ffd33d;pointer-events:none;animation:dshPetPlus .9s cubic-bezier(.2,.8,.4,1) forwards;letter-spacing:-1px;text-shadow:1.5px 0 0 #4a4553,-1.5px 0 0 #4a4553,0 1.5px 0 #4a4553,0 -1.5px 0 #4a4553,1.5px 1.5px 0 #4a4553,-1.5px 1.5px 0 #4a4553,1.5px -1.5px 0 #4a4553,-1.5px -1.5px 0 #4a4553}
-@keyframes dshPetPlus{from{opacity:0;transform:translateX(-50%) translateY(4px) scale(.5)}25%{opacity:1;transform:translateX(-50%) translateY(-10px) scale(1.35)}to{opacity:0;transform:translateX(-50%) translateY(-34px) scale(1)}}
-.dsh-pet-count{position:absolute;top:-30px;left:-6px;z-index:6;font:900 11px ui-monospace,Menlo,Consolas,monospace;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.18);border-radius:999px;padding:2px 9px;color:inherit;pointer-events:none;opacity:0;transition:opacity .25s;box-shadow:0 2px 0 rgba(0,0,0,.12)}
-.dsh-pet-count.on{opacity:1}
-.dsh-pet-spark{position:absolute;z-index:6;width:6px;height:6px;background:#ffd33d;border:1px solid rgba(0,0,0,.25);pointer-events:none;animation:dshPetSpark .6s ease-out forwards}
-@keyframes dshPetSpark{to{transform:translate(var(--dx),var(--dy));opacity:0}}
-.dsh-pet-ctl{position:absolute;top:-30px;right:-8px;z-index:6;font:800 10.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.18);border-radius:999px;padding:3px 10px;color:#7b8190;pointer-events:none;box-shadow:0 2px 0 rgba(0,0,0,.12);white-space:nowrap}
-.dsh-pet-status{position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);z-index:6;font:800 9.5px ui-monospace,Menlo,Consolas,monospace;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.14);border-radius:999px;padding:1px 8px;color:#7b8190;pointer-events:none;white-space:nowrap;box-shadow:0 2px 0 rgba(0,0,0,.10)}
-@media (prefers-reduced-motion:reduce){.dsh-pet-plus{animation-duration:.4s}}
+.dsh-pet-sprite-layer{position:fixed;inset:0;z-index:900;pointer-events:none}
+.dsh-pet-sprite-unit{position:absolute;width:48px;height:56px;pointer-events:auto;cursor:pointer;filter:drop-shadow(0 2px 0 rgba(0,0,0,.12));opacity:.97;user-select:none;-webkit-tap-highlight-color:transparent}
+.dsh-pet-sprite-unit canvas{width:100%;height:100%;image-rendering:pixelated;display:block}
+.dsh-pet-sprite-plus{position:absolute;left:50%;top:-15px;transform:translateX(-50%);z-index:6;font:900 16px ui-monospace,Menlo,Consolas,monospace;color:#ffd33d;pointer-events:none;animation:dshPetSpritePlus .9s cubic-bezier(.2,.8,.4,1) forwards;letter-spacing:-1px;text-shadow:1.5px 0 0 #4a4553,-1.5px 0 0 #4a4553,0 1.5px 0 #4a4553,0 -1.5px 0 #4a4553,1.5px 1.5px 0 #4a4553,-1.5px 1.5px 0 #4a4553,1.5px -1.5px 0 #4a4553,-1.5px -1.5px 0 #4a4553}
+@keyframes dshPetSpritePlus{from{opacity:0;transform:translateX(-50%) translateY(4px) scale(.5)}25%{opacity:1;transform:translateX(-50%) translateY(-10px) scale(1.35)}to{opacity:0;transform:translateX(-50%) translateY(-34px) scale(1)}}
+.dsh-pet-sprite-count{position:absolute;top:-30px;left:-6px;z-index:6;font:900 11px ui-monospace,Menlo,Consolas,monospace;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.18);border-radius:999px;padding:2px 9px;color:inherit;pointer-events:none;opacity:0;transition:opacity .25s;box-shadow:0 2px 0 rgba(0,0,0,.12)}
+.dsh-pet-sprite-count.on{opacity:1}
+.dsh-pet-sprite-spark{position:absolute;z-index:6;width:6px;height:6px;background:#ffd33d;border:1px solid rgba(0,0,0,.25);pointer-events:none;animation:dshPetSpriteSpark .6s ease-out forwards}
+@keyframes dshPetSpriteSpark{to{transform:translate(var(--dx),var(--dy));opacity:0}}
+.dsh-pet-sprite-ctl{position:absolute;top:-30px;right:-8px;z-index:6;font:800 10.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.18);border-radius:999px;padding:3px 10px;color:#7b8190;pointer-events:none;box-shadow:0 2px 0 rgba(0,0,0,.12);white-space:nowrap}
+.dsh-pet-sprite-status{position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);z-index:6;font:800 9.5px ui-monospace,Menlo,Consolas,monospace;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.14);border-radius:999px;padding:1px 8px;color:#7b8190;pointer-events:none;white-space:nowrap;box-shadow:0 2px 0 rgba(0,0,0,.10)}
+@media (prefers-reduced-motion:reduce){.dsh-pet-sprite-plus{animation-duration:.4s}}
 `
   document.head.appendChild(style)
 }
@@ -188,7 +188,7 @@ export const ChatPet: FC = () => {
 
     const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
     let count = 0
-    try { count = parseInt(localStorage.getItem('dshPetClicks') ?? '0', 10) || 0 } catch { count = 0 }
+    try { count = parseInt(localStorage.getItem('dshPetSpriteClicks') ?? '0', 10) || 0 } catch { count = 0 }
     let badgeTimer: ReturnType<typeof setTimeout> | undefined
 
     // physics constants, kept identical to the original game
@@ -258,7 +258,7 @@ export const ChatPet: FC = () => {
       if (still) return
       for (let i = 0; i < 6; i++) {
         const s = document.createElement('span')
-        s.className = 'dsh-pet-spark'
+        s.className = 'dsh-pet-sprite-spark'
         s.style.left = `${18 + Math.random() * 16}px`
         s.style.top = `${-10 - h}px`
         s.style.setProperty('--dx', `${Math.random() * 44 - 22}px`)
@@ -378,7 +378,7 @@ export const ChatPet: FC = () => {
       if (!t || typeof (t as Element).closest !== 'function') return
       if (!document.querySelector('[data-conversation-scroll]')) { setCtl(false); return }
       if (!(t as Element).closest('[data-conversation-scroll]')) { setCtl(false); return }
-      if ((t as Element).closest('.dsh-pet-unit,a,button,input,textarea,select,label,[role="button"],[contenteditable]')) return
+      if ((t as Element).closest('.dsh-pet-sprite-unit,a,button,input,textarea,select,label,[role="button"],[contenteditable]')) return
       setCtl(true)
       lastKeyAt = performance.now()
       const ae = document.activeElement as HTMLElement | null
@@ -408,13 +408,13 @@ export const ChatPet: FC = () => {
 
     const onClickPet = (): void => {
       count++
-      try { localStorage.setItem('dshPetClicks', String(count)) } catch { /* ignore */ }
+      try { localStorage.setItem('dshPetSpriteClicks', String(count)) } catch { /* ignore */ }
       if (!still) {
         burst()
         if (state !== 'climb') { vy = Math.max(vy, SKILLV * .9); state = 'air' }
       }
       const fl = document.createElement('span')
-      fl.className = 'dsh-pet-plus'
+      fl.className = 'dsh-pet-sprite-plus'
       fl.textContent = '+1'
       fl.style.marginLeft = `${Math.round(Math.random() * 14 - 7)}px`
       unit.appendChild(fl)
@@ -474,12 +474,12 @@ export const ChatPet: FC = () => {
   }, [])
 
   return (
-    <div ref={layerRef} className="dsh-pet-layer">
-      <div ref={unitRef} className="dsh-pet-unit" title="Pet（右键打开照顾面板）">
-        <span ref={countRef} className="dsh-pet-count" />
-        <span ref={ctlRef} className="dsh-pet-ctl" />
+    <div ref={layerRef} className="dsh-pet-sprite-layer">
+      <div ref={unitRef} className="dsh-pet-sprite-unit" title="Pet（右键打开照顾面板）">
+        <span ref={countRef} className="dsh-pet-sprite-count" />
+        <span ref={ctlRef} className="dsh-pet-sprite-ctl" />
         <canvas ref={canvasRef} width={96} height={112} />
-        <span ref={statusRef} className="dsh-pet-status" />
+        <span ref={statusRef} className="dsh-pet-sprite-status" />
       </div>
       {panelOpen && <CarePanel engine={engine} anchor={anchor} onClose={() => setPanelOpen(false)} />}
     </div>

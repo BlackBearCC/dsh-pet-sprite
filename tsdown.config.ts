@@ -1,4 +1,4 @@
-// Standalone build for the dsh-pet bundle plugin.
+// Standalone build for the dsh-pet-sprite bundle plugin.
 //
 // Two artifacts, mirroring what the DSH monorepo emits for client UI plugins:
 //  1. Node half (lib/index.js + lib/invariant.js, ESM): a no-op `apply` that
@@ -30,7 +30,7 @@ const RUNTIME_STORE_EXEMPTION = '@deepseek-ai/dsh-client-runtime/client'
 const CLIENT_EXTERNALS: readonly string[] = [...PLATFORM_MODULES, RUNTIME_STORE_EXEMPTION]
 
 const nodeHalf: UserConfig = {
-  name: 'dsh-pet',
+  name: 'dsh-pet-sprite',
   entry: {
     index: 'src/index.ts',
     invariant: 'src/invariant.ts',
@@ -44,7 +44,7 @@ const nodeHalf: UserConfig = {
 }
 
 const clientHalf: UserConfig = {
-  name: 'dsh-pet/client',
+  name: 'dsh-pet-sprite/client',
   entry: { client: 'src/client/index.ts' },
   outDir: 'lib',
   format: 'cjs',
@@ -65,7 +65,7 @@ const clientHalf: UserConfig = {
     // Purity gate: cross-plugin value imports are forbidden — collaborate
     // through cordis services instead. Type-only imports are erased and
     // never reach this gate.
-    name: 'dsh-pet-client-bundle-purity',
+    name: 'dsh-pet-sprite-client-bundle-purity',
     resolveId(source: string) {
       if (!source.startsWith('@deepseek-ai/')) return null
       if (CLIENT_EXTERNALS.includes(source)) return null
@@ -76,7 +76,7 @@ const clientHalf: UserConfig = {
   }],
   outputOptions: {
     entryFileNames: 'client.js',
-    banner: `window.__ModuleLoader__.load({ id: "dsh-pet", factory: (require) => {`,
+    banner: `window.__ModuleLoader__.load({ id: "dsh-pet-sprite", factory: (require) => {`,
     footer: 'return module.exports; } });',
     intro: 'var module = { exports: {} }; var exports = module.exports;',
   },

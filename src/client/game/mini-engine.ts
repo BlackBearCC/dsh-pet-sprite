@@ -91,9 +91,9 @@ export class MiniEngine {
   /** Called once per plugin mount: daily login streak reward */
   onLogin(): void {
     const today = new Date().toISOString().slice(0, 10)
-    const last = localStorage.getItem('dshPetGame:lastLogin')
+    const last = localStorage.getItem('dshPetSpriteGame:lastLogin')
     if (last === today) return
-    localStorage.setItem('dshPetGame:lastLogin', today)
+    localStorage.setItem('dshPetSpriteGame:lastLogin', today)
     const prev = last ? new Date(last) : null
     const days = prev ? Math.floor((Date.now() - prev.getTime()) / 86_400_000) : 999
     this.bus.emit('login:streak', { streak: 1, date: today })

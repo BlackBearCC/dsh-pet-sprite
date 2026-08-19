@@ -1,4 +1,4 @@
-# dsh-pet
+# dsh-pet-sprite
 
 A **playable** pixel companion plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) Web UI.
 
@@ -18,7 +18,7 @@ Right-click the pet to open the care panel (status / interactions / inventory / 
 ## Install
 
 ```sh
-dsh plugin --profile web add github:<your-account>/dsh-pet
+dsh plugin --profile web add github:<your-account>/dsh-pet-sprite
 ```
 
 Then restart DSH (`dsh web`) and open any conversation — the pet spawns at the bottom of the chat flow.
@@ -33,7 +33,7 @@ Then restart DSH (`dsh web`) and open any conversation — the pet spawns at the
 
 ## Compatibility
 
-- DSH developer preview (tested against `0.1.0-rc.7`). DSH is iterating fast with breaking changes; pin a commit (`github:<you>/dsh-pet#<sha>`) if stability matters.
+- DSH developer preview (tested against `0.1.0-rc.7`). DSH is iterating fast with breaking changes; pin a commit (`github:<you>/dsh-pet-sprite#<sha>`) if stability matters.
 
 ## License
 

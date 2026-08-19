@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { ChatPet } from './ChatPet'
 
-export const name = 'dsh-pet'
+export const name = 'dsh-pet-sprite'
 export const inject = ['slots']
 
 export function apply(ctx: Context): void {
@@ -12,8 +12,8 @@ export function apply(ctx: Context): void {
     return slots.register(
       {
         name: 'shell.overlay',
-        id: 'dsh-pet',
-        registrant: 'dsh-pet',
+        id: 'dsh-pet-sprite',
+        registrant: 'dsh-pet-sprite',
       },
       ChatPet,
     )

@@ -1,5 +1,5 @@
 {
-  "name": "dsh-pet",
+  "name": "dsh-pet-sprite",
   "version": "0.1.0",
   "description": "A playable pixel companion for the DeepSeek Harness Web UI: platform-jumps over chat messages, WASD controllable, with a full nurture system (mood/power/health, levels, shop, inventory) fed by your agent's real token usage.",
   "type": "module",
