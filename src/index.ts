@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { fixGrid, GRID_W, GRID_H } from './pixel-format.ts'
 
 // Node half of the plugin: mounts the chat HTTP routes. (The browser half
 // lives in src/client/index.ts and registers the pet UI into shell.overlay.)
@@ -20,6 +21,15 @@ interface ChatRequestBody {
   provider?: string
   model?: string
   /** Browser locale (navigator.language); the pet replies in this language. */
+  lang?: string
+  /** User-authored persona (care panel → settings); overrides the default. */
+  persona?: string
+}
+
+interface GenerateRequestBody {
+  description?: string
+  provider?: string
+  model?: string
   lang?: string
 }
 
@@ -71,6 +81,85 @@ interface ServerResponseLike {
 function json(res: ServerResponseLike, status: number, payload: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
   res.end(JSON.stringify(payload))
+}
+
+/** Drain one llm.stream() call into plain text; throws on stream errors. */
+async function streamText(llm: LlmRuntimeLike, options: Record<string, unknown>): Promise<string> {
+  let text = ''
+  for await (const chunk of llm.stream(options)) {
+    if (chunk.type === 'text-delta' && typeof chunk.text === 'string') text += chunk.text
+    if (chunk.type === 'finish' && chunk.reason?.kind === 'error') {
+      throw new Error(chunk.reason.failure?.message ?? 'llm stream failed')
+    }
+  }
+  return text
+}
+
+/** The persona system prompt: user-authored wins, else the default voice. */
+function personaPrompt(petName: string, persona: string, lang: string): string {
+  const zh = lang.toLowerCase().startsWith('zh')
+  const custom = persona.trim()
+  if (custom.length > 0) {
+    return zh
+      ? [
+          `你是「${petName}」，一只住在用户编程助手界面里的像素小宠物。`,
+          '以下是用户为你写的角色设定，优先按它来演绎：',
+          '「' + custom + '」',
+          '回复保持简短（一到三句话）、口语化；不使用 markdown 或代码块；不自称 AI 助手或模型。',
+        ].join('')
+      : [
+          `You are "${petName}", a pixel pet living inside the user's coding assistant UI.`,
+          'The user wrote this persona for you — follow it first:',
+          `"${custom}"`,
+          'Keep replies short (one to three sentences) and casual; no markdown or code blocks; never call yourself an AI assistant or a model.',
+        ].join('')
+  }
+  return zh
+    ? [
+        `你是「${petName}」，一只住在用户编程助手界面里的像素小宠物。`,
+        '用第一人称以宠物口吻回复：简短（一到三句话）、口语化、有活力，偶尔撒娇但不过分。',
+        '不使用 markdown、列表或代码块；不自称 AI 助手或模型；不要说教。',
+        '用户是每天和你待在一起的开发者，你可以自然地关心他的工作和休息。',
+      ].join('')
+    : [
+        `You are "${petName}", a pixel pet living inside the user's coding assistant UI.`,
+        'Reply in first person, pet voice: short (one to three sentences), casual, energetic, a little clingy but not over the top.',
+        'No markdown, lists, or code blocks; never call yourself an AI assistant or a model; no lecturing.',
+        'The user is a developer who spends every day with you; naturally caring about their work and rest is in character.',
+      ].join('')
+}
+
+/**
+ * Sprite-generator prompt: the model must answer with one JSON object
+ * {name, tagline, rows}. The grid spec mirrors pixel-format.ts exactly.
+ */
+function generatePrompt(description: string): string {
+  return [
+    'You are a pixel-art sprite generator. Output ONLY one JSON object, no markdown fences, no commentary:',
+    `{"name":"<pet name, 2-6 characters, same language as the description>","tagline":"<one-line personality, max 16 characters, same language>","rows":[<${GRID_H} strings, each exactly ${GRID_W} characters>]}`,
+    `Grid rules: ${GRID_W} columns x ${GRID_H} rows; '.' = transparent background.`,
+    `Palette single characters (meaning: color): o=#4a4553 ink outline; h=#f6f7fc white; H=#dcdff0 white shade; s=#ffe9dc skin; S=#f2cdb9 skin shade; e=#3c3744 eye dark; X=#ffffff white; w=#ffffff white; t=#e8434e red; T=#b32832 dark red; k=#9c6640 brown; K=#7d4e2c dark brown; b=#ffb3ae blush; m=#e8927c mouth; l=#39496b navy; g=#8fd0ff light blue; z=#8fa3c8 gray blue; f=#f4a45c orange; F=#d9803a dark orange; p=#f2839b pink; u=#4d6efa vivid blue; c=#e7edff pale.`,
+    'Every colored region must be enclosed by a 1px o outline so the sprite reads on any background.',
+    'The character: cute chibi proportions, head about half the height, simple readable silhouette, centered horizontally (columns 4-19), feet near row 26, two e eyes, one small m mouth. Use 2-4 palette colors plus the o outline.',
+    'Every row string is exactly 24 characters. Aim for readable, not detailed.',
+    `Description of the pet to draw: ${description}`,
+  ].join('\n')
+}
+
+/** Parse the generator reply: strip fences, find the JSON, fix the grid. */
+function parseGeneratedPet(reply: string): { name: string; tagline: string; rows: string[] } {
+  let text = reply.trim()
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fence !== null) text = fence[1].trim()
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start < 0 || end <= start) throw new Error('model did not return a JSON object')
+  const data = JSON.parse(text.slice(start, end + 1)) as { name?: unknown; tagline?: unknown; rows?: unknown }
+  const name = typeof data.name === 'string' && data.name.trim().length > 0 ? data.name.trim().slice(0, 12) : '小家伙'
+  const tagline = typeof data.tagline === 'string' && data.tagline.trim().length > 0 ? data.tagline.trim().slice(0, 24) : ''
+  const grid = fixGrid(data.rows)
+  if ('error' in grid) throw new Error(grid.error)
+  return { name, tagline, rows: grid.rows }
 }
 
 async function readBody(req: ServerRequestLike, limitBytes = 64 * 1024): Promise<string> {
@@ -189,20 +278,7 @@ export function apply(ctx: Context): void {
             return
           }
           const petName = (body.petName ?? '').trim() || '小宠物'
-          const zh = (body.lang ?? 'zh').toLowerCase().startsWith('zh')
-          const system = zh
-            ? [
-                `你是「${petName}」，一只住在用户编程助手界面里的像素小宠物。`,
-                '用第一人称以宠物口吻回复：简短（一到三句话）、口语化、有活力，偶尔撒娇但不过分。',
-                '不使用 markdown、列表或代码块；不自称 AI 助手或模型；不要说教。',
-                '用户是每天和你待在一起的开发者，你可以自然地关心他的工作和休息。',
-              ].join('')
-            : [
-                `You are "${petName}", a pixel pet living inside the user's coding assistant UI.`,
-                'Reply in first person, pet voice: short (one to three sentences), casual, energetic, a little clingy but not over the top.',
-                'No markdown, lists, or code blocks; never call yourself an AI assistant or a model; no lecturing.',
-                'The user is a developer who spends every day with you; naturally caring about their work and rest is in character.',
-              ].join('')
+          const system = personaPrompt(petName, body.persona ?? '', body.lang ?? 'zh')
           const options = {
             provider,
             model,
@@ -210,18 +286,66 @@ export function apply(ctx: Context): void {
             messages: buildMessages(body.history ?? [], message, provider, model),
             maxTokens: 300,
           }
-          let reply = ''
-          for await (const chunk of llm.stream(options)) {
-            if (chunk.type === 'text-delta' && typeof chunk.text === 'string') reply += chunk.text
-            if (chunk.type === 'finish' && chunk.reason?.kind === 'error') {
-              throw new Error(chunk.reason.failure?.message ?? 'llm stream failed')
-            }
-          }
+          const reply = await streamText(llm, options)
           if (reply.trim().length === 0) {
             json(res, 502, { error: 'model produced no text' })
             return
           }
           json(res, 200, { reply: reply.trim(), provider, model })
+        } catch (error) {
+          json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+        }
+      },
+    }))
+  }
+
+  // ── POST /plugins/dsh-pet-sprite/generate — LLM-drawn custom sprite ───────
+  // Takes a free-text description, asks the picked model for one JSON
+  // object {name, tagline, rows}, validates/fixes the 24x28 grid, and
+  // returns it. Storage and coin spending are the browser's business
+  // (the wallet and the custom-pet list both live in localStorage there).
+  if (webServer !== undefined && llm !== undefined) {
+    ctx.effect(() => webServer.register({
+      kind: 'exact',
+      path: '/plugins/dsh-pet-sprite/generate',
+      handler: async (rawReq, rawRes) => {
+        const req = rawReq as ServerRequestLike
+        const res = rawRes as ServerResponseLike
+        try {
+          if (!sameOriginPost(req)) {
+            json(res, 415, { error: 'content-type must be application/json (same-origin)' })
+            return
+          }
+          const body = JSON.parse(await readBody(req)) as GenerateRequestBody
+          const description = (body.description ?? '').trim()
+          const provider = (body.provider ?? '').trim()
+          const model = (body.model ?? '').trim()
+          if (description.length === 0) {
+            json(res, 400, { error: 'description is required' })
+            return
+          }
+          if (description.length > 200) {
+            json(res, 400, { error: 'description too long (max 200 characters)' })
+            return
+          }
+          if (provider.length === 0 || model.length === 0) {
+            json(res, 400, { error: 'provider and model are required (pick one in the pet settings tab)' })
+            return
+          }
+          const options = {
+            provider,
+            model,
+            messages: [{
+              id: crypto.randomUUID(),
+              role: 'user',
+              content: [{ type: 'text', text: generatePrompt(description) }],
+              source: { kind: 'plugin', plugin: 'dsh-pet-sprite' },
+            }],
+            maxTokens: 1200,
+          }
+          const reply = await streamText(llm, options)
+          const pet = parseGeneratedPet(reply)
+          json(res, 200, pet)
         } catch (error) {
           json(res, 500, { error: error instanceof Error ? error.message : String(error) })
         }

@@ -5,7 +5,6 @@
 // instead of being swallowed.
 
 import { useEffect, useRef, useState, type FC } from 'react'
-import { PET_META, type PetId } from './pet-art.ts'
 
 export interface ChatTurn {
   role: 'user' | 'pet'
@@ -18,7 +17,7 @@ export interface ChatModel {
 }
 
 interface Props {
-  petId: PetId
+  petName: string // active companion name (builtin or custom)
   anchor: { x: number; y: number } // pet screen position (box opens beside it)
   model: ChatModel | null
   history: ChatTurn[]
@@ -67,7 +66,7 @@ function injectChatStyles(): void {
   document.head.appendChild(s)
 }
 
-export const PetChatBox: FC<Props> = ({ petId, anchor, model, history, busy, error, onSend, onClear, onClose }) => {
+export const PetChatBox: FC<Props> = ({ petName, anchor, model, history, busy, error, onSend, onClear, onClose }) => {
   const [draft, setDraft] = useState('')
   const logRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -95,16 +94,16 @@ export const PetChatBox: FC<Props> = ({ petId, anchor, model, history, busy, err
     : `${model.provider} / ${model.model}`
 
   return (
-    <div className="dsh-pet-sprite-chat" style={{ left, top }} role="dialog" aria-label={`和${PET_META[petId].name}聊天`}>
+    <div className="dsh-pet-sprite-chat" style={{ left, top }} role="dialog" aria-label={`和${petName}聊天`}>
       <div className="dsh-pet-sprite-chat-hd">
-        <span className="nm">{PET_META[petId].name}</span>
+        <span className="nm">{petName}</span>
         <button type="button" className="clr" onClick={onClear} title="清空聊天记录">清空</button>
         <button type="button" className="x" aria-label="关闭" onClick={onClose}>×</button>
       </div>
       <div className="dsh-pet-sprite-chat-log" ref={logRef}>
         {history.length === 0 && !busy && (
           <div className="dsh-pet-sprite-chat-empty">
-            和 {PET_META[petId].name} 说点什么吧<br />
+            和 {petName} 说点什么吧<br />
             <span style={{ fontSize: 10.5, color: '#b3aebe' }}>{modelHint}</span>
           </div>
         )}
@@ -120,7 +119,7 @@ export const PetChatBox: FC<Props> = ({ petId, anchor, model, history, busy, err
         <input
           ref={inputRef}
           value={draft}
-          placeholder={busy ? '想一想……' : `对 ${PET_META[petId].name} 说……`}
+          placeholder={busy ? '想一想……' : `对 ${petName} 说……`}
           maxLength={500}
           disabled={busy}
           onChange={e => setDraft(e.target.value)}

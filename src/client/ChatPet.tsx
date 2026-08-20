@@ -3,27 +3,34 @@ import { MiniEngine } from './game/mini-engine.ts'
 import { CarePanel } from './CarePanel.tsx'
 import { PetChatBox, type ChatModel, type ChatTurn } from './PetChatBox.tsx'
 import { PetPicker } from './PetPicker.tsx'
+import { framesFromRows, loadCustomPets, saveCustomPet, type CustomPet } from './custom-pets.ts'
 import { drawPet, EGG_ROWS, PET_ART, PET_IDS, PET_META, type Frames, type PetId } from './pet-art.ts'
+import { isCustomPetId } from '../pixel-format.ts'
 
 // Pet pixel companion, ported from the terminal-web project.
 // Three selectable companions (see pet-art.ts): Poka the original girl,
 // Mikan the tabby cat, Puff the baby whale — each a 24x28 hand-written
-// sprite drawn on canvas, no images. The conversation's message nodes
-// are platforms: the pet wanders, jumps and climbs them on its own;
-// clicking the chat background hands over WASD/space control for 10s.
-// Left-click the pet opens a side chat box (LLM replies via the plugin's
-// node-side /plugins/dsh-pet-sprite/chat route, model pickable in the
-// care panel's settings tab). Right-click opens the care panel (PetClaw
-// gameplay systems) and the companion picker.
+// sprite drawn on canvas, no images. On top of those, users can generate
+// custom companions from a text description (settings tab → 100 star
+// coins): the node route asks an LLM for a pixel grid, which lives in
+// localStorage and animates via derived frames (see custom-pets.ts).
+// The conversation's message nodes are platforms: the pet wanders, jumps
+// and climbs them on its own; clicking the chat background hands over
+// WASD/space control for 10s. Left-click the pet opens a side chat box
+// (LLM replies via the plugin's node-side /plugins/dsh-pet-sprite/chat
+// route, model + persona pickable in the care panel's settings tab).
+// Right-click opens the care panel (PetClaw gameplay systems) and the
+// companion picker.
 
 const PET_ID_KEY = 'dshPetSpriteGame:petId'
-function loadPetId(): PetId | null {
+function loadPetId(): string | null {
   try {
     const v = localStorage.getItem(PET_ID_KEY)
-    return PET_IDS.includes(v as PetId) ? (v as PetId) : null
+    if (v === null) return null
+    return PET_IDS.includes(v as PetId) || isCustomPetId(v) ? v : null
   } catch { return null }
 }
-function savePetId(id: PetId): void {
+function savePetId(id: string): void {
   try { localStorage.setItem(PET_ID_KEY, id) } catch { /* ignore */ }
 }
 
@@ -50,6 +57,29 @@ function saveChatModel(model: ChatModel | null): void {
     if (model === null) localStorage.removeItem(CHAT_MODEL_KEY)
     else localStorage.setItem(CHAT_MODEL_KEY, JSON.stringify(model))
   } catch { /* ignore */ }
+}
+
+// ── user-authored persona for the companion's chat voice ───────────────────
+const PERSONA_KEY = 'dshPetSpriteChat:persona'
+function loadPersona(): string {
+  try { return localStorage.getItem(PERSONA_KEY) ?? '' } catch { return '' }
+}
+
+/** Everything the render loop and UI need for one companion, builtin or custom. */
+interface ResolvedPet {
+  name: string
+  tagline: string
+  frames: Frames
+  idleLines: readonly string[]
+}
+function resolvePet(id: string, customs: CustomPet[]): ResolvedPet | null {
+  if (PET_IDS.includes(id as PetId)) {
+    const meta = PET_META[id as PetId]
+    return { name: meta.name, tagline: meta.tagline, frames: PET_ART[id as PetId], idleLines: meta.idleLines }
+  }
+  const custom = customs.find(p => p.id === id)
+  if (custom === undefined) return null
+  return { name: custom.name, tagline: custom.tagline, frames: framesFromRows(custom.rows), idleLines: [] }
 }
 
 // Engine singleton: gameplay state lives in localStorage, one instance
@@ -131,7 +161,8 @@ export const ChatPet: FC = () => {
   const sayRef = useRef<(text: string, wrap?: boolean) => void>(() => {})
   // null until a companion is chosen: a quiet egg sits in the corner
   // instead — clicking it (never auto-popup) opens the picker
-  const [petId, setPetId] = useState<PetId | null>(() => loadPetId())
+  const [petId, setPetId] = useState<string | null>(() => loadPetId())
+  const [customPets, setCustomPets] = useState<CustomPet[]>(() => loadCustomPets())
   const [pickerOpen, setPickerOpen] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [anchor, setAnchor] = useState({ x: 0, y: 0 })
@@ -141,9 +172,13 @@ export const ChatPet: FC = () => {
   const [chatBusy, setChatBusy] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
   const [chatModel, setChatModel] = useState<ChatModel | null>(() => loadChatModel())
+  const [persona, setPersona] = useState<string>(() => loadPersona())
   const engine = getEngine()
 
-  const handlePick = (id: PetId): void => {
+  // builtin or custom; null when the saved custom pet vanished from storage
+  const activePet = petId === null ? null : resolvePet(petId, customPets)
+
+  const handlePick = (id: string): void => {
     savePetId(id)
     setPickerOpen(false)
     setPetId(id)
@@ -161,7 +196,7 @@ export const ChatPet: FC = () => {
   // plugin's node route, surface the reply as both a history row and a
   // pet bubble. Errors are shown inline, never swallowed.
   const handleChatSend = async (text: string): Promise<void> => {
-    if (petId === null || chatBusy) return
+    if (activePet === null || chatBusy) return
     setChatError(null)
     setChatHistory(prev => {
       const next = [...prev, { role: 'user' as const, text }]
@@ -181,12 +216,13 @@ export const ChatPet: FC = () => {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          petName: PET_META[petId].name,
+          petName: activePet.name,
           message: text,
           history: history.slice(0, -1),
           provider: chatModel.provider,
           model: chatModel.model,
           lang: navigator.language,
+          persona,
         }),
       })
       const data = await res.json().catch(() => ({})) as { reply?: string; error?: string }
@@ -204,6 +240,71 @@ export const ChatPet: FC = () => {
     } finally {
       setChatBusy(false)
     }
+  }
+
+  // custom-companion generation: the node route draws a validated 24x28
+  // grid; coins are spent only after a usable sprite came back, and a
+  // failed save refunds them so wallet and pet list never disagree.
+  // in-flight guard lives here (not in the panel) because closing and
+  // reopening the care panel would otherwise lose the busy state and
+  // allow a second concurrent LLM call + coin spend.
+  const generateInFlightRef = useRef(false)
+  const handleGeneratePet = async (description: string): Promise<{ ok: boolean; name?: string; error?: string }> => {
+    if (generateInFlightRef.current) return { ok: false, error: '正在生成中，稍等一下。' }
+    if (chatModel === null) {
+      return { ok: false, error: '还没有选择模型：先在上方「聊天模型」里选一个。' }
+    }
+    const GENERATE_COST = 100
+    const wallet = engine.shop.getWallet()
+    if (wallet.coins < GENERATE_COST) {
+      return { ok: false, error: `星币不够：需要 ${GENERATE_COST}，当前只有 ${wallet.coins}。` }
+    }
+    generateInFlightRef.current = true
+    try {
+      const res = await fetch('/plugins/dsh-pet-sprite/generate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          description,
+          provider: chatModel.provider,
+          model: chatModel.model,
+          lang: navigator.language,
+        }),
+      })
+      const data = await res.json().catch(() => ({})) as { name?: string; tagline?: string; rows?: string[]; error?: string }
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      if (!Array.isArray(data.rows)) throw new Error('生成结果无效：模型没有返回像素网格。')
+      const spend = engine.shop.spendCoins(GENERATE_COST, 'pet_generation')
+      if (!spend.ok) return { ok: false, error: '星币不够。' }
+      const pet: CustomPet = {
+        id: `custom:${Date.now().toString(36)}`,
+        name: (data.name ?? '').trim() || '小家伙',
+        tagline: (data.tagline ?? '').trim(),
+        rows: data.rows,
+        createdAt: Date.now(),
+      }
+      if (!saveCustomPet(pet)) {
+        engine.shop.earnCoins(GENERATE_COST, 'pet_generation_refund')
+        return { ok: false, error: '保存失败：浏览器本地存储不可用。' }
+      }
+      setCustomPets(loadCustomPets())
+      savePetId(pet.id)
+      setPetId(pet.id)
+      // the petId change tears down and remounts the physics effect,
+      // whose cleanup removes any live bubble — speak only after the new
+      // effect is up, or the greeting vanishes in the same frame
+      setTimeout(() => { sayRef.current(`我是 ${pet.name}！`) }, 350)
+      return { ok: true, name: pet.name }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    } finally {
+      generateInFlightRef.current = false
+    }
+  }
+
+  const handlePersonaChange = (value: string): void => {
+    setPersona(value)
+    try { localStorage.setItem(PERSONA_KEY, value) } catch { /* ignore */ }
   }
 
   // pre-hatch egg sprite: redraw on every remount (the egg unmounts
@@ -253,8 +354,10 @@ export const ChatPet: FC = () => {
   }, [petId])
 
   useEffect(() => {
-    if (!petId) return
-    const art: Frames = PET_ART[petId]
+    if (activePet === null) return
+    const art: Frames = activePet.frames
+    // capture by value: the closures below (tick) must not re-check null
+    const idleLines = activePet.idleLines
     injectStyles()
     const layer = layerRef.current
     const unit = unitRef.current
@@ -471,7 +574,7 @@ export const ChatPet: FC = () => {
             const s = engine.getStats()
             say(s.power < 30 || s.mood < 30
               ? pick(CHAT_LINES.low)
-              : pick([...CHAT_LINES.idle, ...PET_META[petId].idleLines]))
+              : pick([...CHAT_LINES.idle, ...idleLines]))
             nextChatAt = now + 24000 + Math.random() * 20000
           }
         }
@@ -688,14 +791,14 @@ export const ChatPet: FC = () => {
 
   return (
     <div ref={layerRef} className="dsh-pet-sprite-layer">
-      {petId && (
-        <div ref={unitRef} className="dsh-pet-sprite-unit" title={`${PET_META[petId].name}（左键聊天 · 右键照顾面板）`}>
+      {activePet !== null && (
+        <div ref={unitRef} className="dsh-pet-sprite-unit" title={`${activePet.name}（左键聊天 · 右键照顾面板）`}>
           <span ref={ctlRef} className="dsh-pet-sprite-ctl" />
           <canvas ref={canvasRef} width={96} height={112} />
           <span ref={statusRef} className="dsh-pet-sprite-status" />
         </div>
       )}
-      {!petId && !pickerOpen && (
+      {activePet === null && !pickerOpen && (
         <div
           ref={eggRef}
           className="dsh-pet-sprite-egg"
@@ -706,20 +809,23 @@ export const ChatPet: FC = () => {
           {eggHint && <span className="dsh-pet-sprite-egg-hint">咔……咔？</span>}
         </div>
       )}
-      {petId && panelOpen && (
+      {activePet !== null && panelOpen && (
         <CarePanel
           engine={engine}
           anchor={anchor}
-          petName={PET_META[petId].name}
+          petName={activePet.name}
           chatModel={chatModel}
+          persona={persona}
+          onPersonaChange={handlePersonaChange}
+          onGeneratePet={handleGeneratePet}
           onSwitchPet={openPicker}
           onChatModelChange={m => { setChatModel(m); saveChatModel(m) }}
           onClose={() => setPanelOpen(false)}
         />
       )}
-      {petId && chatOpen && (
+      {activePet !== null && chatOpen && (
         <PetChatBox
-          petId={petId}
+          petName={activePet.name}
           anchor={anchor}
           model={chatModel}
           history={chatHistory}
@@ -731,7 +837,12 @@ export const ChatPet: FC = () => {
         />
       )}
       {pickerOpen && (
-        <PetPicker currentId={petId} onPick={handlePick} onClose={() => setPickerOpen(false)} />
+        <PetPicker
+          currentId={petId}
+          customPets={customPets}
+          onPick={handlePick}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
     </div>
   )

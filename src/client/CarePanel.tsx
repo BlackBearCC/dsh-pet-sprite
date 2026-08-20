@@ -13,6 +13,9 @@ interface Props {
   petName: string // active companion name (header + switch button)
   chatModel: ChatModel | null // LLM used by the side chat box
   onChatModelChange: (model: ChatModel | null) => void // persist a new choice
+  persona: string // user-authored personality for the companion's chat voice
+  onPersonaChange: (persona: string) => void // persist an edit
+  onGeneratePet: (description: string) => Promise<{ ok: boolean; name?: string; error?: string }> // LLM sprite generation (spends coins)
   onSwitchPet: () => void // reopen the companion picker
   onClose: () => void
 }
@@ -86,6 +89,10 @@ function injectPanelStyles(): void {
 .dsh-pet-sprite-set-note{color:#6b7280;font-size:10.5px;line-height:1.6;margin:4px 0 8px}
 .dsh-pet-sprite-set select{width:100%;border:1.5px solid #2a2f3e;border-radius:8px;padding:6px 8px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;background:#fff;margin-bottom:8px;outline:none}
 .dsh-pet-sprite-set label{display:block;font-size:10.5px;font-weight:800;color:#6b7280;margin:8px 0 4px}
+.dsh-pet-sprite-set textarea{display:block;width:100%;box-sizing:border-box;border:1.5px solid #2a2f3e;border-radius:8px;padding:6px 8px;font:600 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;background:#fff;outline:none;resize:vertical;min-height:54px;margin-bottom:4px}
+.dsh-pet-sprite-set textarea:focus,.dsh-pet-sprite-set input:focus{background:#fffbe8}
+.dsh-pet-sprite-set input{display:block;width:100%;box-sizing:border-box;border:1.5px solid #2a2f3e;border-radius:8px;padding:6px 8px;font:600 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;background:#fff;outline:none;margin-bottom:6px}
+.dsh-pet-sprite-gen-btn{display:block;width:100%;margin-top:2px}
 .dsh-pet-sprite-set-err{border:1.5px solid #e8434e;border-radius:8px;background:#ffe9ec;color:#b32832;font-size:10.5px;font-weight:700;padding:6px 9px;margin:6px 0;line-height:1.5;word-break:break-word}
 .dsh-pet-sprite-toast{position:fixed;z-index:960;background:#1f2430;color:#fff;font-size:12px;padding:7px 13px;border-radius:9px;box-shadow:0 4px 0 rgba(0,0,0,.2);animation:dshPetSpriteToast 2.6s ease forwards;max-width:260px}
 @keyframes dshPetSpriteToast{from{opacity:0;transform:translateY(8px)}10%,80%{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-6px)}}
@@ -93,7 +100,7 @@ function injectPanelStyles(): void {
   document.head.appendChild(s)
 }
 
-export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, onSwitchPet, onClose }) => {
+export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, persona, onPersonaChange, onGeneratePet, onSwitchPet, onClose }) => {
   const [, bump] = useState(0)
   const [tab, setTab] = useState<'status' | 'bag' | 'shop' | 'set'>('status')
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
@@ -101,6 +108,10 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
   // plugin's node route on first open of the tab
   const [modelList, setModelList] = useState<ModelListEntry[] | null>(null)
   const [modelListError, setModelListError] = useState<string | null>(null)
+  // custom sprite generation: description draft + in-flight/error states
+  const [genDesc, setGenDesc] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
   useEffect(() => { injectPanelStyles() }, [])
 
   const loadModels = useCallback(async () => {
@@ -172,6 +183,24 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
     else if (r.reason === 'level_too_low') say('等级不够，还解锁不了')
     else if (r.reason === 'daily_limit') say('今天卖完了，明天再来')
     else say(`买不了（${r.reason}）`)
+    refresh()
+  }
+
+  // LLM sprite generation runs in ChatPet (wallet + storage live there);
+  // this side only owns the draft, the busy state, and error surfacing.
+  const doGenerate = async (): Promise<void> => {
+    const description = genDesc.trim()
+    if (description.length === 0 || generating) return
+    setGenerating(true)
+    setGenError(null)
+    const r = await onGeneratePet(description)
+    setGenerating(false)
+    if (r.ok) {
+      setGenDesc('')
+      say(`新伙伴「${r.name ?? ''}」加入！已切换为它。`)
+    } else {
+      setGenError(r.error ?? '生成失败，再试一次。')
+    }
     refresh()
   }
 
@@ -298,6 +327,37 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                   })()}
                 </>
               )}
+              <h4>角色设定</h4>
+              <div className="dsh-pet-sprite-set-note">
+                给 {petName} 写的性格设定，聊天时会优先按它来演；留空则用默认性格。
+              </div>
+              <textarea
+                value={persona}
+                onChange={(e) => onPersonaChange(e.target.value)}
+                placeholder="例如：嘴硬心软的傲娇性格，喜欢被夸，偶尔阴阳怪气但很靠得住"
+                maxLength={500}
+                rows={3}
+              />
+              <h4>生成新形象</h4>
+              <div className="dsh-pet-sprite-set-note">
+                用一句话描述想要的伙伴，模型会画出它的像素形象并加入选择列表（当前 🪙{stats.coins}）。
+              </div>
+              <input
+                value={genDesc}
+                onChange={(e) => setGenDesc(e.target.value)}
+                placeholder="例如：戴圆眼镜的绿色小恐龙"
+                maxLength={200}
+                disabled={generating}
+                onKeyDown={(e) => { if (e.key === 'Enter') void doGenerate() }}
+              />
+              <button
+                className="dsh-pet-sprite-btn dsh-pet-sprite-gen-btn"
+                onClick={() => { void doGenerate() }}
+                disabled={generating || genDesc.trim().length === 0}
+              >
+                {generating ? '绘制中……' : '生成新伙伴（🪙100）'}
+              </button>
+              {genError !== null && <div className="dsh-pet-sprite-set-err">{genError}</div>}
               <h4>形象</h4>
               <button className="dsh-pet-sprite-btn dsh-pet-sprite-switch" onClick={onSwitchPet}>更换形象</button>
             </div>
