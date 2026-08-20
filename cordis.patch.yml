@@ -1,7 +1,8 @@
-# Bundle layer: mounts the dsh-pet-sprite plugin row. The node half is a no-op
-# apply (it only exists so the plugin appears in the host Loader); the
-# browser half arrives via exports["./client"] + the dsh.client manifest
-# and registers into the shell.overlay slot.
+# Bundle layer: mounts the dsh-pet-sprite plugin row. The node half registers
+# the companion-chat HTTP routes (/plugins/dsh-pet-sprite/models + /chat,
+# guarded by same-origin checks); the browser half arrives via
+# exports["./client"] + the dsh.client manifest and registers the pet UI
+# into the shell.overlay slot.
 - insert:
     - id: pet-sprite
       name: dsh-pet-sprite

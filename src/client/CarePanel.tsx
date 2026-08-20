@@ -22,6 +22,8 @@ interface ModelListEntry {
   id: string
   name: string
   models: Array<{ id: string; name: string }>
+  /** Set when listing this provider's models failed; the rest stay usable. */
+  error?: string
 }
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -268,8 +270,15 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                     }}
                   >
                     <option value="" disabled={chatModel !== null}>选择服务商</option>
-                    {modelList.map(p => <option key={p.id} value={p.id}>{p.name}（{p.id}）</option>)}
+                    {modelList.map(p => (
+                      <option key={p.id} value={p.id} disabled={p.models.length === 0}>
+                        {p.name}（{p.id}）{p.models.length === 0 ? ' — 模型列表不可用' : ''}
+                      </option>
+                    ))}
                   </select>
+                  {modelList.filter(p => p.error !== undefined).map(p => (
+                    <div key={p.id} className="dsh-pet-sprite-set-err">{p.name}：{p.error}</div>
+                  ))}
                   {chatModel !== null && (() => {
                     const p = modelList.find(m => m.id === chatModel.provider)
                     return p ? (

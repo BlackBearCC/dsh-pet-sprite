@@ -153,6 +153,10 @@ export const ChatPet: FC = () => {
     setPickerOpen(true)
   }
 
+  // styles must exist before the egg renders too (first launch has no
+  // petId, and the petId effect below would otherwise never inject them)
+  useEffect(() => { injectStyles() }, [])
+
   // one companion chat round-trip: append the user turn, POST to the
   // plugin's node route, surface the reply as both a history row and a
   // pet bubble. Errors are shown inline, never swallowed.
@@ -182,6 +186,7 @@ export const ChatPet: FC = () => {
           history: history.slice(0, -1),
           provider: chatModel.provider,
           model: chatModel.model,
+          lang: navigator.language,
         }),
       })
       const data = await res.json().catch(() => ({})) as { reply?: string; error?: string }
