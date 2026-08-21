@@ -1,3 +1,4 @@
 node_modules/
 *.tsbuildinfo
 .DS_Store
+src/index.ts.bak-*

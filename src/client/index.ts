@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { ChatPet } from './ChatPet'
 import { setSessionsService } from './workspace.ts'
+import { registerSyncSlices } from './sync-bootstrap.ts'
 
 export const name = 'dsh-pet-sprite'
 export const inject = ['slots', 'sessions']
@@ -14,6 +15,10 @@ export function apply(ctx: Context): void {
   // view when the service object lacks the expected shape
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setSessionsService((ctx as any).sessions)
+  // cross-device sync: wire every localStorage slice into the sync layer
+  // before the pet renders, then hydrate from the server (a no-op when the
+  // local cache is already the newest copy)
+  registerSyncSlices()
   slots.inject('shell.overlay', () => {
     return slots.register(
       {

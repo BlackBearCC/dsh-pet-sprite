@@ -5,6 +5,7 @@
 
 import { fixGrid, GRID_H, GRID_W, isCustomPetId } from '../pixel-format.ts'
 import type { Frames } from './pet-art.ts'
+import { schedulePush } from './sync.ts'
 
 export interface CustomPet {
   /** 'custom:<base36 timestamp>' — distinguishes generated pets from builtins. */
@@ -178,6 +179,7 @@ export function saveProfile(id: string, profile: PetProfile): boolean {
     const all = loadProfiles()
     all[id] = profile
     localStorage.setItem(PROFILE_KEY, JSON.stringify(all))
+    schedulePush()
     return true
   } catch {
     return false
@@ -209,6 +211,7 @@ export function saveCustomPet(pet: CustomPet): boolean {
     const all = loadCustomPets()
     all.push(pet)
     localStorage.setItem(KEY, JSON.stringify(all))
+    schedulePush()
     return true
   } catch {
     return false

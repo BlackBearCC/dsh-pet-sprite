@@ -13,6 +13,8 @@ import { drawIcon, ICONS } from './pixel-icons.tsx'
 import { isCustomPetId } from '../pixel-format.ts'
 import { recordLevelUp, recordTask, recordTurn } from './game/witness-log.ts'
 import { trackWorkspace, type WorkspaceView } from './workspace.ts'
+import { isSyncReady, whenSyncReady } from './sync-gate.ts'
+import { schedulePush } from './sync.ts'
 import {
   addMemories, autoExtractEnabled, bumpTaskCounter, loadMemories,
   memoryTexts, removeMemory, setAutoExtract, takeExtractSlot, type PetMemory,
@@ -43,6 +45,7 @@ function loadPetId(): string | null {
 }
 function savePetId(id: string): void {
   try { localStorage.setItem(PET_ID_KEY, id) } catch { /* ignore */ }
+  schedulePush()
 }
 
 // ── one-time teasers: shown exactly once, ever (persisted in localStorage) ──
@@ -62,6 +65,7 @@ function markTeaserSeen(kind: 'status' | 'ctl'): void {
     const next = { ...loadTeasersSeen(), [kind]: true }
     localStorage.setItem(TEASER_SEEN_KEY, JSON.stringify(next))
   } catch { /* ignore */ }
+  schedulePush()
 }
 
 // ── companion chat: history + model choice persist in localStorage ──────────
@@ -75,6 +79,7 @@ function loadChatHistory(): ChatTurn[] {
 }
 function saveChatHistory(history: ChatTurn[]): void {
   try { localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history.slice(-30))) } catch { /* ignore */ }
+  schedulePush()
 }
 function loadChatModel(): ChatModel | null {
   try {
@@ -87,6 +92,7 @@ function saveChatModel(model: ChatModel | null): void {
     if (model === null) localStorage.removeItem(CHAT_MODEL_KEY)
     else localStorage.setItem(CHAT_MODEL_KEY, JSON.stringify(model))
   } catch { /* ignore */ }
+  schedulePush()
 }
 
 // module-level cache of the persisted ctl flag: re-reading localStorage on
@@ -175,7 +181,7 @@ function injectStyles(): void {
   document.head.appendChild(style)
 }
 
-export const ChatPet: FC = () => {
+const ChatPetImpl: FC = () => {
   const layerRef = useRef<HTMLDivElement>(null)
   const unitRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -1091,3 +1097,23 @@ export const ChatPet: FC = () => {
     </div>
   )
 }
+
+// ── hydration gate ──────────────────────────────────────────────────────────
+// Cross-device sync hydrates localStorage from the server before the pet
+// mounts (the pet reads localStorage synchronously in its useState
+// initializers). This wrapper delays the first render until hydration
+// settles — with a hard timeout (a dead server must not hide the pet).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const GatedChatPet: FC = (props: any) => {
+  const [ready, setReady] = useState(isSyncReady)
+  useEffect(() => {
+    if (ready) return
+    let done = false
+    whenSyncReady().then(() => { if (!done) { done = true; setReady(true) } })
+    const t = setTimeout(() => { if (!done) { done = true; setReady(true) } }, 4000)
+    return () => { done = true; clearTimeout(t) }
+  }, [ready])
+  if (!ready) return null
+  return <ChatPetImpl {...props} />
+}
+export { GatedChatPet as ChatPet }

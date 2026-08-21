@@ -19,6 +19,8 @@ export interface PetMemory {
 export const MEMORY_LIMIT = 30
 /** Longest text kept per memory; the prompt asks for ≤ 40. */
 const MAX_TEXT = 60
+import { schedulePush } from './sync.ts'
+
 const KEY = 'dshPetSpriteMemory:items'
 /** Daily cap on automatic extractions (each one is an LLM round trip). */
 const DAILY_KEY = 'dshPetSpriteMemory:daily'
@@ -71,6 +73,7 @@ export function addMemories(texts: string[], sessionTitle: string): PetMemory[] 
   // newest first, hard cap
   const next = [...fresh, ...existing].slice(0, MEMORY_LIMIT)
   try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* best-effort */ }
+  schedulePush()
   return next
 }
 
@@ -78,6 +81,7 @@ export function addMemories(texts: string[], sessionTitle: string): PetMemory[] 
 export function removeMemory(id: string): PetMemory[] {
   const next = loadMemories().filter(m => m.id !== id)
   try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* best-effort */ }
+  schedulePush()
   return next
 }
 
@@ -110,6 +114,7 @@ function dailyCount(): number {
 export function takeExtractSlot(): boolean {
   if (dailyCount() >= DAILY_EXTRACT_LIMIT) return false
   try { localStorage.setItem(DAILY_KEY, JSON.stringify({ date: todayKey(), n: dailyCount() + 1 })) } catch { /* best-effort */ }
+  schedulePush()
   return true
 }
 
@@ -120,4 +125,5 @@ export function autoExtractEnabled(): boolean {
 
 export function setAutoExtract(on: boolean): void {
   try { localStorage.setItem(AUTO_KEY, on ? '1' : '0') } catch { /* best-effort */ }
+  schedulePush()
 }

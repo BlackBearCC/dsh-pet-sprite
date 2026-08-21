@@ -1,4 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
+import fs from 'node:fs'
+import path from 'node:path'
 import { fixGrid, GRID_W, GRID_H } from './pixel-format.ts'
 
 // Node half of the plugin: mounts the chat HTTP routes. (The browser half
@@ -698,4 +700,71 @@ export function apply(ctx: Context): void {
       }
     },
   }))
+
+  // ── GET/POST /plugins/dsh-pet-sprite/state — cross-device pet state ──────
+  // The browser keeps its own localStorage copy (offline cache + instant
+  // boot), and mirrors the full state blob here so every device of the
+  // same user hatches the same companion with the same progress. The blob
+  // is opaque JSON to this route: the client owns its shape and bumps
+  // `savedAt` (epoch ms) on every push; hydration adopts the server copy
+  // only when its savedAt is newer than the local one (last-write-wins,
+  // single-user semantics). State lives in one JSON file under DSH home
+  // (storages dir when present, else the profile dir), written atomically.
+    const stateDir = (): string => {
+      const home = process.env.DSH_HOME ?? path.join(process.env.HOME ?? '/home', '.dsh')
+      return path.join(home, 'storages')
+    }
+    const stateFile = (): string => path.join(stateDir(), 'dsh-pet-sprite-state.json')
+    const readState = (): { savedAt?: number; [k: string]: unknown } => {
+      try {
+        return JSON.parse(fs.readFileSync(stateFile(), 'utf8')) as { savedAt?: number }
+      } catch { return {} }
+    }
+    const writeState = (data: Record<string, unknown>): void => {
+      fs.mkdirSync(stateDir(), { recursive: true })
+      const tmp = stateFile() + '.tmp'
+      fs.writeFileSync(tmp, JSON.stringify(data))
+      fs.renameSync(tmp, stateFile())
+    }
+
+    registerWhenReady((webServer) => webServer.register({
+      kind: 'exact',
+      path: '/plugins/dsh-pet-sprite/state',
+      handler: async (rawReq, rawRes) => {
+        const req = rawReq as ServerRequestLike
+        const res = rawRes as ServerResponseLike
+        try {
+          if (req.method === 'GET') {
+            json(res, 200, readState())
+            return
+          }
+          if (req.method !== 'POST') {
+            json(res, 405, { error: 'method not allowed' })
+            return
+          }
+          if (!sameOriginPost(req)) {
+            json(res, 415, { error: 'content-type must be application/json (same-origin)' })
+            return
+          }
+          const body = JSON.parse(await readBody(req, 256 * 1024)) as Record<string, unknown>
+          if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+            json(res, 400, { error: 'body must be a JSON object' })
+            return
+          }
+          // only ever move forward in time: a stale tab racing a newer
+          // device must not rewind the server copy
+          const prev = readState()
+          const prevAt = typeof prev.savedAt === 'number' ? prev.savedAt : 0
+          const nextAt = typeof body.savedAt === 'number' ? body.savedAt : 0
+          if (nextAt < prevAt) {
+            json(res, 409, { error: 'stale state', savedAt: prevAt })
+            return
+          }
+          writeState(body)
+          json(res, 200, { ok: true, savedAt: nextAt })
+        } catch (error) {
+          json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+        }
+      },
+    }))
 }

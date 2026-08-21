@@ -3,6 +3,7 @@
 // save(key, data) -> serialized synchronously.
 
 import type { PersistenceStore } from './attribute-engine.ts'
+import { schedulePush } from '../sync.ts'
 
 const PREFIX = 'dshPetSpriteGame:'
 
@@ -23,6 +24,9 @@ export function createLocalStore(): PersistenceStore {
       } catch {
         // storage full / private mode: keep running in-memory
       }
+      // cross-device sync: the engine saves on every attribute tick /
+      // coin / inventory change — the sync layer debounces the upload
+      schedulePush()
     },
   }
 }

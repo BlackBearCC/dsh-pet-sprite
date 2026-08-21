@@ -4,6 +4,8 @@
 // into an LLM-written log entry in the pet's voice (node route /witness),
 // which pays a once-per-day coin reward. Records prune to the newest 14.
 
+import { schedulePush } from '../sync.ts'
+
 const KEY = 'dshPetSpriteWitness:days'
 const KEEP_DAYS = 14
 
@@ -57,6 +59,7 @@ function saveAll(all: Record<string, WitnessDay>): void {
     const pruned: Record<string, WitnessDay> = {}
     for (const k of keys) pruned[k] = all[k]
     localStorage.setItem(KEY, JSON.stringify(pruned))
+    schedulePush()
   } catch {
     /* storage unusable — the journal is best-effort */
   }
