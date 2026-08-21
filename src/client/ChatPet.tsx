@@ -70,6 +70,10 @@ function saveChatModel(model: ChatModel | null): void {
   } catch { /* ignore */ }
 }
 
+// module-level: the WASD control hint is taught exactly once per page
+// load — once it faded away, later takeovers stay silent
+let ctlHintShown = false
+
 // ── per-pet profiles: persona + event lines (storage in custom-pets.ts) ─────
 
 /** Everything the render loop and UI need for one companion, builtin or custom. */
@@ -528,6 +532,13 @@ export const ChatPet: FC = () => {
     }
     const statusTimer = setInterval(renderStatus, 2500)
     renderStatus()
+    // the pill is a spawn-time teaser: 10s after the pet appears it hides
+    // for good (per mount) — the care panel (right-click) owns the stats
+    // afterwards, and the chat area stays clean
+    const statusHideTimer = setTimeout(() => {
+      if (statusBar) statusBar.style.display = 'none'
+      clearInterval(statusTimer)
+    }, 10_000)
 
     // DSH bridges: user message → power drain; assistant done → EXP
     // (every turn also lands in the daily work journal)
@@ -681,11 +692,14 @@ export const ChatPet: FC = () => {
     }
     let ctlFadeTimer: ReturnType<typeof setTimeout> | undefined
     function showCtlHint(): void {
-      if (!ctlHint) return
+      // teach the keys exactly once per page load: the first takeover shows
+      // the pill for 10s, every later interaction stays quiet
+      if (!ctlHint || ctlHintShown) return
+      ctlHintShown = true
       ctlHint.style.display = ''
       ctlHint.style.opacity = '1'
       clearTimeout(ctlFadeTimer)
-      ctlFadeTimer = setTimeout(() => { if (ctlHint) ctlHint.style.opacity = '0' }, 3500)
+      ctlFadeTimer = setTimeout(() => { if (ctlHint) ctlHint.style.opacity = '0' }, 10_000)
     }
     function setCtl(on: boolean): void {
       if (playerCtl === on) return
@@ -940,6 +954,7 @@ export const ChatPet: FC = () => {
       return () => {
         clearInterval(slow)
         clearInterval(statusTimer)
+        clearTimeout(statusHideTimer)
         clearTimeout(ctlFadeTimer)
         clearTimeout(bubbleTimer)
         bubbleEl?.remove()
@@ -961,6 +976,7 @@ export const ChatPet: FC = () => {
       clearTimeout(bubbleTimer)
       bubbleEl?.remove()
       clearInterval(statusTimer)
+      clearTimeout(statusHideTimer)
       document.removeEventListener('pointerdown', onPointerDown, true)
       document.removeEventListener('keydown', onKeyDown, true)
       document.removeEventListener('keyup', onKeyUp, true)
