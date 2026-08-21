@@ -563,6 +563,8 @@ export const ChatPet: FC = () => {
     let ft = 0, ftAcc = 0, lastFrame: string[] | null = null, lastT = 0, planAt = 0
     let plats: Platform[] = [], platsAt = 0
     let mode: PetMode = 'idle'
+    // attribute levels, polled in the tick loop for visual state feedback
+    let petMoodLevel = 'normal', petPowerLevel = 'normal', petHealthLevel = 'normal'
     let floorX = 0, floorY = 0, visible = false
 
     // player control: click chat background to take over, 10s idle hands back
@@ -700,10 +702,20 @@ export const ChatPet: FC = () => {
       if (dragging) return art.JP
       if (state === 'air') return art.JP
       if (state === 'climb') return ft % 2 ? art.KA : art.KB
-      if (moving || (goal && Math.abs(goal.x - x) > 3)) return ft % 4 < 2 ? art.KA : art.KB
+      if (moving || (goal && Math.abs(goal.x - x) > 3)) {
+        // starving pet shuffles slowly, no walk cycle
+        if (petPowerLevel === 'starving') return art.I
+        return ft % 4 < 2 ? art.KA : art.KB
+      }
       if (mode === 'work') return ft % 6 < 3 ? art.WA : art.WB
-      if (ft % 50 === 9) return art.BL
-      if (ft % 140 >= 124) return ft % 10 < 5 ? art.ZZ : art.B
+      // sad pet blinks twice as often
+      if (ft % (petMoodLevel === 'sad' ? 25 : 50) === 9) return art.BL
+      // starving/sick pet slumps asleep more often
+      if (petPowerLevel === 'starving' || petPowerLevel === 'hungry' || petHealthLevel === 'sick') {
+        if (ft % 80 >= 64) return ft % 10 < 5 ? art.ZZ : art.B
+      } else {
+        if (ft % 140 >= 124) return ft % 10 < 5 ? art.ZZ : art.B
+      }
       return ft % 10 < 5 ? art.I : art.B
     }
 
@@ -724,6 +736,8 @@ export const ChatPet: FC = () => {
         scanPlats()
         platsAt = now + 150
         mode = document.querySelector('[data-streaming]') ? 'work' : 'idle'
+        // poll attribute levels for visual state feedback in frameFor()
+        { const s = engine.getStats(); petMoodLevel = s.moodLevel; petPowerLevel = s.powerLevel; petHealthLevel = s.healthLevel }
         bridgeChat()
         if (state === 'ground' && h > 0 && !support()) { state = 'air'; vy = 0; plat = null }
         // ambient chat: idle-only, low frequency, low-status lines win
