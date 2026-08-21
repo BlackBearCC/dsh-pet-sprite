@@ -33,6 +33,29 @@ interface GenerateRequestBody {
   lang?: string
 }
 
+/** One day of witnessed work, sent by the browser's journal. */
+interface WitnessDayPayload {
+  turns?: number
+  tasks?: number
+  inChars?: number
+  outChars?: number
+  spanMinutes?: number
+  night?: boolean
+  feed?: number
+  play?: number
+  rest?: number
+  levelUps?: number
+}
+
+interface WitnessRequestBody {
+  petName?: string
+  persona?: string
+  lang?: string
+  provider?: string
+  model?: string
+  day?: WitnessDayPayload
+}
+
 // All LLM/web shapes below are structural: the host provides the services,
 // so the plugin only needs the runtime contract, not the packages.
 interface LlmStreamChunk {
@@ -144,6 +167,33 @@ function generatePrompt(description: string): string {
     'Every row string is exactly 24 characters. Aim for readable, not detailed.',
     `Description of the pet to draw: ${description}`,
   ].join('\n')
+}
+
+/** Clamp one journal number coming off the wire. */
+function num(v: unknown, max = 10_000_000): number {
+  const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 0
+  return Math.max(0, Math.min(max, n))
+}
+
+/**
+ * Work-journal prompt: the day's witnessed numbers plus the assignment —
+ * one short log entry written TO the user, in the pet's own voice.
+ */
+function witnessPrompt(lang: string, day: WitnessDayPayload): string {
+  const zh = lang.toLowerCase().startsWith('zh')
+  return zh
+    ? [
+        `今天你亲眼见证的数据：对话 ${num(day.turns)} 轮；完成 ${num(day.tasks)} 个任务；输入约 ${num(day.inChars)} 字；输出约 ${num(day.outChars)} 字；活跃跨度约 ${num(day.spanMinutes)} 分钟${day.night === true ? '；凌晨还在干活' : ''}；喂食 ${num(day.feed)} 次、玩耍 ${num(day.play)} 次、休息 ${num(day.rest)} 次、升级 ${num(day.levelUps)} 次。`,
+        '请以你的口吻替用户写一条今天的工作日志：写给用户本人，关于他今天的工作，80 字以内，一到三句话。',
+        '从数据里挑一两个最有特点的数字自然地写进去，不要罗列清单；带一点你作为见证者的态度（心疼、骄傲、吐槽都行）。如果今天什么都没发生，就轻轻调侃一下。',
+        '不要 markdown、不要代码块、不要标题。',
+      ].join('\n')
+    : [
+        `Data you witnessed today: ${num(day.turns)} chat turns; ${num(day.tasks)} tasks completed; ~${num(day.inChars)} chars in; ~${num(day.outChars)} chars out; ~${num(day.spanMinutes)} min active${day.night === true ? '; worked past midnight' : ''}; fed ${num(day.feed)}, played ${num(day.play)}, rested ${num(day.rest)}, leveled up ${num(day.levelUps)}.`,
+        'Write today\'s work journal for the user in your own voice: addressed to them, about their day, max 60 words, one to three sentences.',
+        'Weave in one or two standout numbers naturally — no lists; a little witness attitude (proud, concerned, teasing) is welcome. If nothing happened today, tease them gently.',
+        'No markdown, no code blocks, no headings.',
+      ].join('\n')
 }
 
 /** Parse the generator reply: strip fences, find the JSON, fix the grid. */
@@ -346,6 +396,57 @@ export function apply(ctx: Context): void {
           const reply = await streamText(llm, options)
           const pet = parseGeneratedPet(reply)
           json(res, 200, pet)
+        } catch (error) {
+          json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+        }
+      },
+    }))
+  }
+
+  // ── POST /plugins/dsh-pet-sprite/witness — LLM-written daily work log ────
+  // Takes the day's journal numbers plus the pet's persona, returns one
+  // short log entry in the pet's voice. Rewards and journal storage stay
+  // in the browser (localStorage); the route only shapes the prompt.
+  if (webServer !== undefined && llm !== undefined) {
+    ctx.effect(() => webServer.register({
+      kind: 'exact',
+      path: '/plugins/dsh-pet-sprite/witness',
+      handler: async (rawReq, rawRes) => {
+        const req = rawReq as ServerRequestLike
+        const res = rawRes as ServerResponseLike
+        try {
+          if (!sameOriginPost(req)) {
+            json(res, 415, { error: 'content-type must be application/json (same-origin)' })
+            return
+          }
+          const body = JSON.parse(await readBody(req)) as WitnessRequestBody
+          const provider = (body.provider ?? '').trim()
+          const model = (body.model ?? '').trim()
+          if (provider.length === 0 || model.length === 0) {
+            json(res, 400, { error: 'provider and model are required (pick one in the pet settings tab)' })
+            return
+          }
+          const petName = (body.petName ?? '').trim() || '小宠物'
+          const lang = body.lang ?? 'zh'
+          const options = {
+            provider,
+            model,
+            system: personaPrompt(petName, body.persona ?? '', lang),
+            messages: [{
+              id: crypto.randomUUID(),
+              role: 'user',
+              content: [{ type: 'text', text: witnessPrompt(lang, body.day ?? {}) }],
+              source: { kind: 'plugin', plugin: 'dsh-pet-sprite' },
+            }],
+            maxTokens: 200,
+          }
+          const reply = await streamText(llm, options)
+          const log = reply.trim()
+          if (log.length === 0) {
+            json(res, 502, { error: 'model produced no text' })
+            return
+          }
+          json(res, 200, { log })
         } catch (error) {
           json(res, 500, { error: error instanceof Error ? error.message : String(error) })
         }

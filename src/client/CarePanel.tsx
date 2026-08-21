@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import type { MiniEngine } from './game/mini-engine.ts'
 import type { ChatModel } from './PetChatBox.tsx'
 import type { PetProfile } from './custom-pets.ts'
+import { claimLogReward, getWitnessDay, recordCare, saveLogText } from './game/witness-log.ts'
 
 interface Props {
   engine: MiniEngine
@@ -18,6 +19,7 @@ interface Props {
   onProfileChange: (patch: Partial<PetProfile>) => void // persist an edit
   onGeneratePet: (description: string) => Promise<{ ok: boolean; name?: string; error?: string }> // LLM sprite generation (spends coins)
   onImportPet: (text: string) => { ok: boolean; name?: string; error?: string } // share-file import (free)
+  onPetSay: (text: string) => void // speak through the pet's bubble (wrapped)
   onSwitchPet: () => void // reopen the companion picker
   onClose: () => void
 }
@@ -104,13 +106,14 @@ function injectPanelStyles(): void {
 .dsh-pet-sprite-import-row .dsh-pet-sprite-btn{flex:1}
 .dsh-pet-sprite-paste-box{margin-bottom:6px}
 .dsh-pet-sprite-set-err{border:1.5px solid #e8434e;border-radius:8px;background:#ffe9ec;color:#b32832;font-size:10.5px;font-weight:700;padding:6px 9px;margin:6px 0;line-height:1.5;word-break:break-word}
+.dsh-pet-sprite-log{border:1.5px solid #2a2f3e;border-radius:10px;background:#fffbe8;padding:7px 9px;margin-top:8px;font-size:11.5px;font-weight:600;line-height:1.7;color:#1f2430;white-space:pre-wrap;word-break:break-word}
 .dsh-pet-sprite-toast{position:fixed;z-index:960;background:#1f2430;color:#fff;font-size:12px;padding:7px 13px;border-radius:9px;box-shadow:0 4px 0 rgba(0,0,0,.2);animation:dshPetSpriteToast 2.6s ease forwards;max-width:260px}
 @keyframes dshPetSpriteToast{from{opacity:0;transform:translateY(8px)}10%,80%{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-6px)}}
 `
   document.head.appendChild(s)
 }
 
-export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, onImportPet, onSwitchPet, onClose }) => {
+export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, onImportPet, onPetSay, onSwitchPet, onClose }) => {
   const [, bump] = useState(0)
   const [tab, setTab] = useState<'status' | 'bag' | 'shop' | 'set'>('status')
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
@@ -129,6 +132,10 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
   const [importError, setImportError] = useState<string | null>(null)
   // event-lines editor: collapsed by default, one textarea per event pool
   const [linesOpen, setLinesOpen] = useState(false)
+  // daily work log: today's cached entry shows on open, regenerate on click
+  const [logBusy, setLogBusy] = useState(false)
+  const [logError, setLogError] = useState<string | null>(null)
+  const [logText, setLogText] = useState<string | null>(() => getWitnessDay().lastLog ?? null)
   useEffect(() => { injectPanelStyles() }, [])
 
   const loadModels = useCallback(async () => {
@@ -189,15 +196,25 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
     power: stats.power, health: stats.health, mood: stats.mood, adventureActive: false,
   }).slice(0, 8)
 
+  // work-log summary numbers (read per render: cheap, stays fresh)
+  const day = getWitnessDay()
+  const fmtChars = (n: number): string => n >= 10000 ? `${(n / 10000).toFixed(1)} 万字` : `${n} 字`
+
   const doPlay = (id: string) => {
     const r = engine.care.play(id)
-    if (r.ok) say(petLine('play', id === 'hide_seek' ? '捉迷藏！心情 +10 电量 -18' : '晒了一会太阳，心情 +5'))
+    if (r.ok) {
+      recordCare('play')
+      say(petLine('play', id === 'hide_seek' ? '捉迷藏！心情 +10 电量 -18' : '晒了一会太阳，心情 +5'))
+    }
     else if (r.reason === 'too_low_power') say('电量不够玩了，先喂点东西吧')
     refresh()
   }
   const doRest = () => {
     const r = engine.care.rest({ duration: 30, wokeBy: 'manual' })
-    if (r.ok) say(petLine('rest', `睡了 30 秒：心情 +${r.moodGain} 电量 -${r.powerCost}`))
+    if (r.ok) {
+      recordCare('rest')
+      say(petLine('rest', `睡了 30 秒：心情 +${r.moodGain} 电量 -${r.powerCost}`))
+    }
     refresh()
   }
   const doUse = (id: string) => {
@@ -206,6 +223,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
       say(r.reason === 'cooldown' ? '还在冷却中…' : '没有这个道具了')
       return
     }
+    recordCare('feed')
     const def = engine.inventory.getItemDef(id)
     say(petLine('feed', def?.useText ?? `用掉了 ${id}`))
     refresh()
@@ -218,6 +236,63 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
     else if (r.reason === 'daily_limit') say('今天卖完了，明天再来')
     else say(`买不了（${r.reason}）`)
     refresh()
+  }
+
+  // daily work log: today's journal numbers + persona go to the node route,
+  // which returns one log entry in the pet's voice. Regeneration is free
+  // (the user's own model), but the witness-fee coins land once per day.
+  const doWitness = async (): Promise<void> => {
+    if (logBusy) return
+    if (chatModel === null) {
+      setLogError('还没有选择模型：先在「设置」里选一个。')
+      return
+    }
+    setLogBusy(true)
+    setLogError(null)
+    try {
+      const day = getWitnessDay()
+      const res = await fetch('/plugins/dsh-pet-sprite/witness', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          petName,
+          persona: profile.persona,
+          lang: navigator.language,
+          provider: chatModel.provider,
+          model: chatModel.model,
+          day: {
+            turns: day.turns,
+            tasks: day.tasks,
+            inChars: day.inChars,
+            outChars: day.outChars,
+            spanMinutes: day.lastAt > day.firstAt ? Math.round((day.lastAt - day.firstAt) / 60000) : 0,
+            night: day.night,
+            feed: day.feed,
+            play: day.play,
+            rest: day.rest,
+            levelUps: day.levelUps,
+          },
+        }),
+      })
+      const data = await res.json().catch(() => ({})) as { log?: string; error?: string }
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      const log = (data.log ?? '').trim()
+      if (log.length === 0) throw new Error('模型没有写出日志。')
+      setLogText(log)
+      saveLogText(log)
+      onPetSay(log)
+      if (claimLogReward()) {
+        engine.shop.earnCoins(20, 'witness_log')
+        say('见证完成，+🪙20')
+      } else {
+        say('已更新今日日志')
+      }
+      refresh()
+    } catch (error) {
+      setLogError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setLogBusy(false)
+    }
   }
 
   // LLM sprite generation runs in ChatPet (wallet + storage live there);
@@ -300,6 +375,22 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                   <button className="dsh-pet-sprite-btn" onClick={() => doPlay('sunbathe')}>晒太阳</button>
                   <button className="dsh-pet-sprite-btn" onClick={doRest}>睡一会</button>
                 </div>
+              </div>
+              <div className="dsh-pet-sprite-sec">
+                <h4>工作日志</h4>
+                <div className="dsh-pet-sprite-set-note">
+                  今日：对话 {day.turns} 轮 · 完成 {day.tasks} 件 · 输出 {fmtChars(day.outChars)}
+                  {day.night ? ' · 凌晨仍在干活' : ''} —— {petName} 都看在眼里。
+                </div>
+                <button
+                  className="dsh-pet-sprite-btn dsh-pet-sprite-gen-btn"
+                  onClick={() => { void doWitness() }}
+                  disabled={logBusy}
+                >
+                  {logBusy ? '写日志中……' : logText !== null ? '重新生成今日日志' : '生成今日工作日志'}
+                </button>
+                {logError !== null && <div className="dsh-pet-sprite-set-err">{logError}</div>}
+                {logText !== null && <div className="dsh-pet-sprite-log">{logText}</div>}
               </div>
             </>
           )}

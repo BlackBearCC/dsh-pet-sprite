@@ -9,6 +9,7 @@ import {
 } from './custom-pets.ts'
 import { drawPet, EGG_ROWS, PET_ART, PET_IDS, PET_META, type Frames, type PetId } from './pet-art.ts'
 import { isCustomPetId } from '../pixel-format.ts'
+import { recordLevelUp, recordTask, recordTurn } from './game/witness-log.ts'
 
 // Pet pixel companion, ported from the terminal-web project.
 // Three selectable companions (see pet-art.ts): Poka the original girl,
@@ -87,6 +88,15 @@ let engineSingleton: MiniEngine | null = null
 function getEngine(): MiniEngine {
   if (!engineSingleton) engineSingleton = new MiniEngine()
   return engineSingleton
+}
+
+// The journal witnesses level-ups too. Wired once per page load, not per
+// effect run — the engine is a singleton and its bus outlives remounts.
+let witnessBusWired = false
+function wireWitnessBus(engine: MiniEngine): void {
+  if (witnessBusWired) return
+  witnessBusWired = true
+  engine.bus.on('level:up', () => recordLevelUp())
 }
 
 type PetMode = 'idle' | 'work'
@@ -173,6 +183,7 @@ export const ChatPet: FC = () => {
   const [chatModel, setChatModel] = useState<ChatModel | null>(() => loadChatModel())
   const [profiles, setProfiles] = useState<Record<string, PetProfile>>(() => loadProfiles())
   const engine = getEngine()
+  wireWitnessBus(engine)
 
   // builtin or custom; null when the saved custom pet vanished from storage
   const activePet = petId === null ? null : resolvePet(petId, customPets)
@@ -417,13 +428,16 @@ export const ChatPet: FC = () => {
     { const s = engine.getStats(); if (statusBar) statusBar.textContent = `Lv.${s.level} ${s.title} · 🪙${s.coins}` }
 
     // DSH bridges: user message → power drain; assistant done → EXP
+    // (every turn also lands in the daily work journal)
     let lastUserCount = document.querySelectorAll('[data-chat-flow-kind="user"]').length
     let wasStreaming = !!document.querySelector('[data-streaming]')
     function bridgeChat(): void {
       const users = document.querySelectorAll('[data-chat-flow-kind="user"]')
       if (users.length > lastUserCount) {
         const last = users[users.length - 1]
-        engine.onUserMessage(last.textContent ?? '')
+        const text = last.textContent ?? ''
+        engine.onUserMessage(text)
+        recordTurn(text.length)
       }
       lastUserCount = users.length
       const streaming = !!document.querySelector('[data-streaming]')
@@ -431,7 +445,9 @@ export const ChatPet: FC = () => {
       if (wasStreaming && !streaming) {
         const nodes = document.querySelectorAll('[data-chat-flow-key]')
         const lastNode = nodes[nodes.length - 1]
-        engine.onAssistantDone(lastNode?.textContent?.length ?? 0)
+        const outLen = lastNode?.textContent?.length ?? 0
+        engine.onAssistantDone(outLen)
+        recordTask(outLen)
         if (users.length > 0) say(line('done'))
       }
       wasStreaming = streaming
@@ -860,6 +876,7 @@ export const ChatPet: FC = () => {
           onProfileChange={handleProfileChange}
           onGeneratePet={handleGeneratePet}
           onImportPet={handleImportPet}
+          onPetSay={(text) => sayRef.current(text, true)}
           onSwitchPet={openPicker}
           onChatModelChange={m => { setChatModel(m); saveChatModel(m) }}
           onClose={() => setPanelOpen(false)}
