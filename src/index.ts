@@ -411,23 +411,44 @@ function buildMessages(history: ChatTurn[], message: string, provider: string, m
 }
 
 export function apply(ctx: Context): void {
-  const llm = ctx.get('llm') as LlmRuntimeLike | undefined
-  const webServer = ctx.get('webServer') as WebServerLike | undefined
+  // Services are resolved lazily: on fast hosts this plugin's apply() can run
+  // before the webServer/llm services finish initializing, and cordis'
+  // ctx.get() (strict) returns undefined then — caching that value would
+  // silently skip every route registration. Resolve at request time instead,
+  // and re-check at registration time; routes themselves answer 503 until
+  // the llm service shows up.
+  const llmNow = (): LlmRuntimeLike | undefined => ctx.get('llm') as LlmRuntimeLike | undefined
+  const webServerNow = (): WebServerLike | undefined => ctx.get('webServer') as WebServerLike | undefined
+
+  const registerWhenReady = (register: (webServer: WebServerLike) => () => void): void => {
+    const attempt = (): void => {
+      const webServer = webServerNow()
+      if (webServer === undefined) {
+        // Service not up yet: retry on a short timer until it appears (the
+        // webServer service initializes during boot, a few hundred ms at most).
+        const timer = setTimeout(attempt, 250)
+        ctx.effect(() => () => clearTimeout(timer))
+        return
+      }
+      ctx.effect(() => register(webServer))
+    }
+    attempt()
+  }
 
   // ── GET /plugins/dsh-pet-sprite/models ─ proxy/model list for the picker ──
-  if (webServer !== undefined) {
-    ctx.effect(() => webServer.register({
-      kind: 'exact',
-      path: '/plugins/dsh-pet-sprite/models',
-      handler: async (rawReq, rawRes) => {
-        const res = rawRes as ServerResponseLike
-        if (llm === undefined) {
-          json(res, 503, { error: 'llm service unavailable' })
-          return
-        }
-        try {
-          const providers = []
-          for (const p of llm.listProviders()) {
+  registerWhenReady((webServer) => webServer.register({
+    kind: 'exact',
+    path: '/plugins/dsh-pet-sprite/models',
+    handler: async (rawReq, rawRes) => {
+      const res = rawRes as ServerResponseLike
+      const llm = llmNow()
+      if (llm === undefined) {
+        json(res, 503, { error: 'llm service unavailable' })
+        return
+      }
+      try {
+        const providers = []
+        for (const p of llm.listProviders()) {
             // one broken provider must not kill the whole list: surface the
             // error on that entry and keep the rest usable
             try {
@@ -451,163 +472,171 @@ export function apply(ctx: Context): void {
           json(res, 500, { error: error instanceof Error ? error.message : String(error) })
         }
       },
-    }))
-  }
+  }))
 
   // ── POST /plugins/dsh-pet-sprite/chat ─ one companion chat completion ─────
-  if (webServer !== undefined && llm !== undefined) {
-    ctx.effect(() => webServer.register({
-      kind: 'exact',
-      path: '/plugins/dsh-pet-sprite/chat',
-      handler: async (rawReq, rawRes) => {
-        const req = rawReq as ServerRequestLike
-        const res = rawRes as ServerResponseLike
-        try {
-          if (!sameOriginPost(req)) {
-            json(res, 415, { error: 'content-type must be application/json (same-origin)' })
-            return
-          }
-          const body = JSON.parse(await readBody(req)) as ChatRequestBody
-          const message = (body.message ?? '').trim()
-          const provider = (body.provider ?? '').trim()
-          const model = (body.model ?? '').trim()
-          if (message.length === 0) {
-            json(res, 400, { error: 'message is required' })
-            return
-          }
-          if (provider.length === 0 || model.length === 0) {
-            json(res, 400, { error: 'provider and model are required (pick one in the pet settings tab)' })
-            return
-          }
-          const petName = (body.petName ?? '').trim() || '小宠物'
-          const system = personaPrompt(petName, body.persona ?? '', body.lang ?? 'zh')
-            + contextPrompt(body.lang ?? 'zh', body.workspace, body.memories, body.petState)
-          const options = {
-            provider,
-            model,
-            system,
-            messages: buildMessages(body.history ?? [], message, provider, model),
-            maxTokens: 300,
-          }
-          const reply = await streamText(llm, options)
-          if (reply.trim().length === 0) {
-            json(res, 502, { error: 'model produced no text' })
-            return
-          }
-          json(res, 200, { reply: reply.trim(), provider, model })
-        } catch (error) {
-          json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+  registerWhenReady((webServer) => webServer.register({
+    kind: 'exact',
+    path: '/plugins/dsh-pet-sprite/chat',
+    handler: async (rawReq, rawRes) => {
+      const req = rawReq as ServerRequestLike
+      const res = rawRes as ServerResponseLike
+      const llm = llmNow()
+      if (llm === undefined) {
+        json(res, 503, { error: 'llm service unavailable' })
+        return
+      }
+      try {
+        if (!sameOriginPost(req)) {
+          json(res, 415, { error: 'content-type must be application/json (same-origin)' })
+          return
         }
-      },
-    }))
-  }
+        const body = JSON.parse(await readBody(req)) as ChatRequestBody
+        const message = (body.message ?? '').trim()
+        const provider = (body.provider ?? '').trim()
+        const model = (body.model ?? '').trim()
+        if (message.length === 0) {
+          json(res, 400, { error: 'message is required' })
+          return
+        }
+        if (provider.length === 0 || model.length === 0) {
+          json(res, 400, { error: 'provider and model are required (pick one in the pet settings tab)' })
+          return
+        }
+        const petName = (body.petName ?? '').trim() || '小宠物'
+        const system = personaPrompt(petName, body.persona ?? '', body.lang ?? 'zh')
+          + contextPrompt(body.lang ?? 'zh', body.workspace, body.memories, body.petState)
+        const options = {
+          provider,
+          model,
+          system,
+          messages: buildMessages(body.history ?? [], message, provider, model),
+          maxTokens: 300,
+        }
+        const reply = await streamText(llm, options)
+        if (reply.trim().length === 0) {
+          json(res, 502, { error: 'model produced no text' })
+          return
+        }
+        json(res, 200, { reply: reply.trim(), provider, model })
+      } catch (error) {
+        json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+      }
+    },
+  }))
 
   // ── POST /plugins/dsh-pet-sprite/generate — LLM-drawn custom sprite ───────
   // Takes a free-text description, asks the picked model for one JSON
   // object {name, tagline, rows}, validates/fixes the 24x28 grid, and
   // returns it. Storage and coin spending are the browser's business
   // (the wallet and the custom-pet list both live in localStorage there).
-  if (webServer !== undefined && llm !== undefined) {
-    ctx.effect(() => webServer.register({
-      kind: 'exact',
-      path: '/plugins/dsh-pet-sprite/generate',
-      handler: async (rawReq, rawRes) => {
-        const req = rawReq as ServerRequestLike
-        const res = rawRes as ServerResponseLike
-        try {
-          if (!sameOriginPost(req)) {
-            json(res, 415, { error: 'content-type must be application/json (same-origin)' })
-            return
-          }
-          const body = JSON.parse(await readBody(req)) as GenerateRequestBody
-          const description = (body.description ?? '').trim()
-          const provider = (body.provider ?? '').trim()
-          const model = (body.model ?? '').trim()
-          if (description.length === 0) {
-            json(res, 400, { error: 'description is required' })
-            return
-          }
-          if (description.length > 200) {
-            json(res, 400, { error: 'description too long (max 200 characters)' })
-            return
-          }
-          if (provider.length === 0 || model.length === 0) {
-            json(res, 400, { error: 'provider and model are required (pick one in the pet settings tab)' })
-            return
-          }
-          const options = {
-            provider,
-            model,
-            messages: [{
-              id: crypto.randomUUID(),
-              role: 'user',
-              content: [{ type: 'text', text: generatePrompt(description) }],
-              source: { kind: 'plugin', plugin: 'dsh-pet-sprite' },
-            }],
-            maxTokens: 2000,
-          }
-          const reply = await streamText(llm, options)
-          const pet = parseGeneratedPet(reply)
-          json(res, 200, pet)
-        } catch (error) {
-          json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+  registerWhenReady((webServer) => webServer.register({
+    kind: 'exact',
+    path: '/plugins/dsh-pet-sprite/generate',
+    handler: async (rawReq, rawRes) => {
+      const req = rawReq as ServerRequestLike
+      const res = rawRes as ServerResponseLike
+      const llm = llmNow()
+      if (llm === undefined) {
+        json(res, 503, { error: 'llm service unavailable' })
+        return
+      }
+      try {
+        if (!sameOriginPost(req)) {
+          json(res, 415, { error: 'content-type must be application/json (same-origin)' })
+          return
         }
-      },
-    }))
-  }
+        const body = JSON.parse(await readBody(req)) as GenerateRequestBody
+        const description = (body.description ?? '').trim()
+        const provider = (body.provider ?? '').trim()
+        const model = (body.model ?? '').trim()
+        if (description.length === 0) {
+          json(res, 400, { error: 'description is required' })
+          return
+        }
+        if (description.length > 200) {
+          json(res, 400, { error: 'description too long (max 200 characters)' })
+          return
+        }
+        if (provider.length === 0 || model.length === 0) {
+          json(res, 400, { error: 'provider and model are required (pick one in the pet settings tab)' })
+          return
+        }
+        const options = {
+          provider,
+          model,
+          messages: [{
+            id: crypto.randomUUID(),
+            role: 'user',
+            content: [{ type: 'text', text: generatePrompt(description) }],
+            source: { kind: 'plugin', plugin: 'dsh-pet-sprite' },
+          }],
+          maxTokens: 2000,
+        }
+        const reply = await streamText(llm, options)
+        const pet = parseGeneratedPet(reply)
+        json(res, 200, pet)
+      } catch (error) {
+        json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+      }
+    },
+  }))
 
   // ── POST /plugins/dsh-pet-sprite/witness — LLM-written daily work log ────
   // Takes the day's journal numbers plus the pet's persona, returns one
   // short log entry in the pet's voice. Rewards and journal storage stay
   // in the browser (localStorage); the route only shapes the prompt.
-  if (webServer !== undefined && llm !== undefined) {
-    ctx.effect(() => webServer.register({
-      kind: 'exact',
-      path: '/plugins/dsh-pet-sprite/witness',
-      handler: async (rawReq, rawRes) => {
-        const req = rawReq as ServerRequestLike
-        const res = rawRes as ServerResponseLike
-        try {
-          if (!sameOriginPost(req)) {
-            json(res, 415, { error: 'content-type must be application/json (same-origin)' })
-            return
-          }
-          const body = JSON.parse(await readBody(req)) as WitnessRequestBody
-          const provider = (body.provider ?? '').trim()
-          const model = (body.model ?? '').trim()
-          if (provider.length === 0 || model.length === 0) {
-            json(res, 400, { error: 'provider and model are required (pick one in the pet settings tab)' })
-            return
-          }
-          const petName = (body.petName ?? '').trim() || '小宠物'
-          const lang = body.lang ?? 'zh'
-          const scope = body.scope === 'week' ? 'week' as const : 'day' as const
-          const options = {
-            provider,
-            model,
-            system: personaPrompt(petName, body.persona ?? '', lang)
-              + contextPrompt(lang, undefined, body.memories, body.petState),
-            messages: [{
-              id: crypto.randomUUID(),
-              role: 'user',
-              content: [{ type: 'text', text: witnessPrompt(lang, scope, body.day ?? {}) }],
-              source: { kind: 'plugin', plugin: 'dsh-pet-sprite' },
-            }],
-            maxTokens: scope === 'week' ? 300 : 200,
-          }
-          const reply = await streamText(llm, options)
-          const log = reply.trim()
-          if (log.length === 0) {
-            json(res, 502, { error: 'model produced no text' })
-            return
-          }
-          json(res, 200, { log })
-        } catch (error) {
-          json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+  registerWhenReady((webServer) => webServer.register({
+    kind: 'exact',
+    path: '/plugins/dsh-pet-sprite/witness',
+    handler: async (rawReq, rawRes) => {
+      const req = rawReq as ServerRequestLike
+      const res = rawRes as ServerResponseLike
+      const llm = llmNow()
+      if (llm === undefined) {
+        json(res, 503, { error: 'llm service unavailable' })
+        return
+      }
+      try {
+        if (!sameOriginPost(req)) {
+          json(res, 415, { error: 'content-type must be application/json (same-origin)' })
+          return
         }
-      },
-    }))
-  }
+        const body = JSON.parse(await readBody(req)) as WitnessRequestBody
+        const provider = (body.provider ?? '').trim()
+        const model = (body.model ?? '').trim()
+        if (provider.length === 0 || model.length === 0) {
+          json(res, 400, { error: 'provider and model are required (pick one in the pet settings tab)' })
+          return
+        }
+        const petName = (body.petName ?? '').trim() || '小宠物'
+        const lang = body.lang ?? 'zh'
+        const scope = body.scope === 'week' ? 'week' as const : 'day' as const
+        const options = {
+          provider,
+          model,
+          system: personaPrompt(petName, body.persona ?? '', lang)
+            + contextPrompt(lang, undefined, body.memories, body.petState),
+          messages: [{
+            id: crypto.randomUUID(),
+            role: 'user',
+            content: [{ type: 'text', text: witnessPrompt(lang, scope, body.day ?? {}) }],
+            source: { kind: 'plugin', plugin: 'dsh-pet-sprite' },
+          }],
+          maxTokens: scope === 'week' ? 300 : 200,
+        }
+        const reply = await streamText(llm, options)
+        const log = reply.trim()
+        if (log.length === 0) {
+          json(res, 502, { error: 'model produced no text' })
+          return
+        }
+        json(res, 200, { log })
+      } catch (error) {
+        json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+      }
+    },
+  }))
 
   // ── POST /plugins/dsh-pet-sprite/memory — distill new pet memories ────────
   // The browser sends a bounded recent-conversation window plus the
@@ -615,55 +644,58 @@ export function apply(ctx: Context): void {
   // facts about the user as a JSON string array. An unparseable or
   // empty answer is a valid outcome ("nothing worth remembering"),
   // not an error — the browser stores whatever it gets.
-  if (webServer !== undefined && llm !== undefined) {
-    ctx.effect(() => webServer.register({
-      kind: 'exact',
-      path: '/plugins/dsh-pet-sprite/memory',
-      handler: async (rawReq, rawRes) => {
-        const req = rawReq as ServerRequestLike
-        const res = rawRes as ServerResponseLike
-        try {
-          if (!sameOriginPost(req)) {
-            json(res, 415, { error: 'content-type must be application/json (same-origin)' })
-            return
-          }
-          const body = JSON.parse(await readBody(req)) as MemoryRequestBody
-          const recentText = (body.recentText ?? '').trim().slice(0, 6000)
-          const provider = (body.provider ?? '').trim()
-          const model = (body.model ?? '').trim()
-          if (recentText.length === 0) {
-            json(res, 400, { error: 'recentText is required' })
-            return
-          }
-          if (provider.length === 0 || model.length === 0) {
-            json(res, 400, { error: 'provider and model are required (pick one in the pet settings tab)' })
-            return
-          }
-          const petName = (body.petName ?? '').trim() || '小宠物'
-          const lang = body.lang ?? 'zh'
-          const existing = (body.existing ?? [])
-            .filter((t): t is string => typeof t === 'string')
-            .map(t => t.trim().slice(0, 60))
-            .filter(t => t.length > 0)
-            .slice(0, 30)
-          const options = {
-            provider,
-            model,
-            system: personaPrompt(petName, body.persona ?? '', lang),
-            messages: [{
-              id: crypto.randomUUID(),
-              role: 'user',
-              content: [{ type: 'text', text: memoryPrompt(lang, petName, recentText, existing) }],
-              source: { kind: 'plugin', plugin: 'dsh-pet-sprite' },
-            }],
-            maxTokens: 200,
-          }
-          const reply = await streamText(llm, options)
-          json(res, 200, { memories: parseMemories(reply) })
-        } catch (error) {
-          json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+  registerWhenReady((webServer) => webServer.register({
+    kind: 'exact',
+    path: '/plugins/dsh-pet-sprite/memory',
+    handler: async (rawReq, rawRes) => {
+      const req = rawReq as ServerRequestLike
+      const res = rawRes as ServerResponseLike
+      const llm = llmNow()
+      if (llm === undefined) {
+        json(res, 503, { error: 'llm service unavailable' })
+        return
+      }
+      try {
+        if (!sameOriginPost(req)) {
+          json(res, 415, { error: 'content-type must be application/json (same-origin)' })
+          return
         }
-      },
-    }))
-  }
+        const body = JSON.parse(await readBody(req)) as MemoryRequestBody
+        const recentText = (body.recentText ?? '').trim().slice(0, 6000)
+        const provider = (body.provider ?? '').trim()
+        const model = (body.model ?? '').trim()
+        if (recentText.length === 0) {
+          json(res, 400, { error: 'recentText is required' })
+          return
+        }
+        if (provider.length === 0 || model.length === 0) {
+          json(res, 400, { error: 'provider and model are required (pick one in the pet settings tab)' })
+          return
+        }
+        const petName = (body.petName ?? '').trim() || '小宠物'
+        const lang = body.lang ?? 'zh'
+        const existing = (body.existing ?? [])
+          .filter((t): t is string => typeof t === 'string')
+          .map(t => t.trim().slice(0, 60))
+          .filter(t => t.length > 0)
+          .slice(0, 30)
+        const options = {
+          provider,
+          model,
+          system: personaPrompt(petName, body.persona ?? '', lang),
+          messages: [{
+            id: crypto.randomUUID(),
+            role: 'user',
+            content: [{ type: 'text', text: memoryPrompt(lang, petName, recentText, existing) }],
+            source: { kind: 'plugin', plugin: 'dsh-pet-sprite' },
+          }],
+          maxTokens: 200,
+        }
+        const reply = await streamText(llm, options)
+        json(res, 200, { memories: parseMemories(reply) })
+      } catch (error) {
+        json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+      }
+    },
+  }))
 }
