@@ -120,3 +120,113 @@ export function claimLogReward(): boolean {
   update(d => { d.rewarded = true }, false)
   return true
 }
+
+// ─── weekly rollup ──────────────────────────────────────────────────────────
+
+const WEEK_KEY = 'dshPetSpriteWitness:week'
+
+/** One week of witnessed work: the last 7 days including today. */
+export interface WitnessWeek {
+  /** Local date keys of the covered days (oldest first). */
+  dates: string[]
+  /** Days with any recorded activity. */
+  activeDays: number
+  turns: number
+  tasks: number
+  inChars: number
+  outChars: number
+  /** Days that had past-midnight activity. */
+  nights: number
+  feed: number
+  play: number
+  rest: number
+  levelUps: number
+  /** Total minutes between the week's first and last recorded activity. */
+  spanMinutes: number
+}
+
+/** The last 7 daily records, zero-filled for days nothing happened. */
+export function getWitnessDays(count = 7): WitnessDay[] {
+  const all = loadAll()
+  const out: WitnessDay[] = []
+  for (let i = count - 1; i >= 0; i--) {
+    const key = dateKey(new Date(Date.now() - i * 86_400_000))
+    out.push(all[key] ?? emptyDay(key))
+  }
+  return out
+}
+
+/** Aggregate the last 7 days into one week rollup. */
+export function getWitnessWeek(): WitnessWeek {
+  const days = getWitnessDays(7)
+  const week: WitnessWeek = {
+    dates: days.map(d => d.date), activeDays: 0,
+    turns: 0, tasks: 0, inChars: 0, outChars: 0, nights: 0,
+    feed: 0, play: 0, rest: 0, levelUps: 0, spanMinutes: 0,
+  }
+  let firstAt = 0, lastAt = 0
+  for (const d of days) {
+    const active = d.turns > 0 || d.tasks > 0 || d.feed > 0 || d.play > 0 || d.rest > 0 || d.levelUps > 0
+    if (active) week.activeDays++
+    week.turns += d.turns
+    week.tasks += d.tasks
+    week.inChars += d.inChars
+    week.outChars += d.outChars
+    if (d.night) week.nights++
+    week.feed += d.feed
+    week.play += d.play
+    week.rest += d.rest
+    week.levelUps += d.levelUps
+    if (d.firstAt > 0 && (firstAt === 0 || d.firstAt < firstAt)) firstAt = d.firstAt
+    if (d.lastAt > lastAt) lastAt = d.lastAt
+  }
+  week.spanMinutes = lastAt > firstAt ? Math.round((lastAt - firstAt) / 60000) : 0
+  return week
+}
+
+/** Weekly log cache: { weekStart, lastLog, rewarded } keyed by the week's Monday. */
+interface WeekCache {
+  weekStart: string
+  lastLog?: string
+  rewarded?: boolean
+}
+
+/** Monday of the current local week, as a date key. */
+function weekStartKey(): string {
+  const d = new Date()
+  const back = (d.getDay() + 6) % 7 // Monday=0
+  return dateKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - back))
+}
+
+function loadWeek(): WeekCache {
+  try {
+    const v = JSON.parse(localStorage.getItem(WEEK_KEY) ?? 'null') as WeekCache | null
+    if (v !== null && typeof v === 'object' && v.weekStart === weekStartKey()) return v
+  } catch { /* fall through */ }
+  return { weekStart: weekStartKey() }
+}
+
+function saveWeek(cache: WeekCache): void {
+  try { localStorage.setItem(WEEK_KEY, JSON.stringify(cache)) } catch { /* best-effort */ }
+}
+
+/** This week's cached log text, if one was generated. */
+export function getWeekLog(): string | null {
+  return loadWeek().lastLog ?? null
+}
+
+/** Cache the generated weekly log text (does not count as activity). */
+export function saveWeekLogText(text: string): void {
+  const c = loadWeek()
+  c.lastLog = text
+  saveWeek(c)
+}
+
+/** Claim this week's once-per-week reward; false when already claimed. */
+export function claimWeekReward(): boolean {
+  const c = loadWeek()
+  if (c.rewarded === true) return false
+  c.rewarded = true
+  saveWeek(c)
+  return true
+}

@@ -45,6 +45,9 @@ interface WitnessDayPayload {
   play?: number
   rest?: number
   levelUps?: number
+  /** Week scope only: days with any activity, and past-midnight days. */
+  activeDays?: number
+  nights?: number
 }
 
 interface WitnessRequestBody {
@@ -53,6 +56,8 @@ interface WitnessRequestBody {
   lang?: string
   provider?: string
   model?: string
+  /** 'day' (default) writes today's log; 'week' summarizes the last 7 days. */
+  scope?: 'day' | 'week'
   day?: WitnessDayPayload
 }
 
@@ -178,9 +183,25 @@ function num(v: unknown, max = 10_000_000): number {
 /**
  * Work-journal prompt: the day's witnessed numbers plus the assignment —
  * one short log entry written TO the user, in the pet's own voice.
+ * Week scope summarizes the last 7 days instead of today.
  */
-function witnessPrompt(lang: string, day: WitnessDayPayload): string {
+function witnessPrompt(lang: string, scope: 'day' | 'week', day: WitnessDayPayload): string {
   const zh = lang.toLowerCase().startsWith('zh')
+  if (scope === 'week') {
+    return zh
+      ? [
+          `最近 7 天你亲眼见证的数据：活跃 ${num(day.activeDays)} 天；对话 ${num(day.turns)} 轮；完成 ${num(day.tasks)} 个任务；输入约 ${num(day.inChars)} 字；输出约 ${num(day.outChars)} 字；其中 ${num(day.nights)} 天干到凌晨；喂食 ${num(day.feed)} 次、玩耍 ${num(day.play)} 次、休息 ${num(day.rest)} 次、升级 ${num(day.levelUps)} 次。`,
+          '请以你的口吻替用户写一条本周工作周报：写给用户本人，回顾他这一周，120 字以内，两到四句话。',
+          '可以看趋势和对比（哪几天最猛、有没有连着熬夜、周末歇没歇），挑一两个数字自然地写进去，不要罗列清单；带一点你作为见证者的态度。如果这一周基本没动静，就轻轻调侃一下。',
+          '不要 markdown、不要代码块、不要标题。',
+        ].join('\n')
+    : [
+        `Data you witnessed over the last 7 days: active on ${num(day.activeDays)} days; ${num(day.turns)} chat turns; ${num(day.tasks)} tasks completed; ~${num(day.inChars)} chars in; ~${num(day.outChars)} chars out; worked past midnight on ${num(day.nights)} nights; fed ${num(day.feed)}, played ${num(day.play)}, rested ${num(day.rest)}, leveled up ${num(day.levelUps)}.`,
+        'Write this week\'s work report for the user in your own voice: addressed to them, looking back at their week, max 90 words, two to four sentences.',
+        'Trends and comparisons are welcome (which days were heaviest, any late-night streaks, whether the weekend got a rest) — weave in one or two numbers naturally, no lists; a little witness attitude is welcome. If the week was quiet, tease them gently.',
+        'No markdown, no code blocks, no headings.',
+      ].join('\n')
+  }
   return zh
     ? [
         `今天你亲眼见证的数据：对话 ${num(day.turns)} 轮；完成 ${num(day.tasks)} 个任务；输入约 ${num(day.inChars)} 字；输出约 ${num(day.outChars)} 字；活跃跨度约 ${num(day.spanMinutes)} 分钟${day.night === true ? '；凌晨还在干活' : ''}；喂食 ${num(day.feed)} 次、玩耍 ${num(day.play)} 次、休息 ${num(day.rest)} 次、升级 ${num(day.levelUps)} 次。`,
@@ -428,6 +449,7 @@ export function apply(ctx: Context): void {
           }
           const petName = (body.petName ?? '').trim() || '小宠物'
           const lang = body.lang ?? 'zh'
+          const scope = body.scope === 'week' ? 'week' as const : 'day' as const
           const options = {
             provider,
             model,
@@ -435,10 +457,10 @@ export function apply(ctx: Context): void {
             messages: [{
               id: crypto.randomUUID(),
               role: 'user',
-              content: [{ type: 'text', text: witnessPrompt(lang, body.day ?? {}) }],
+              content: [{ type: 'text', text: witnessPrompt(lang, scope, body.day ?? {}) }],
               source: { kind: 'plugin', plugin: 'dsh-pet-sprite' },
             }],
-            maxTokens: 200,
+            maxTokens: scope === 'week' ? 300 : 200,
           }
           const reply = await streamText(llm, options)
           const log = reply.trim()

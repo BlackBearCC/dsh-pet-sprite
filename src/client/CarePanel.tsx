@@ -7,7 +7,10 @@ import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import type { MiniEngine } from './game/mini-engine.ts'
 import type { ChatModel } from './PetChatBox.tsx'
 import type { PetProfile } from './custom-pets.ts'
-import { claimLogReward, getWitnessDay, recordCare, saveLogText } from './game/witness-log.ts'
+import {
+  claimLogReward, claimWeekReward, getWitnessDay, getWitnessWeek, getWeekLog,
+  recordCare, saveLogText, saveWeekLogText,
+} from './game/witness-log.ts'
 
 interface Props {
   engine: MiniEngine
@@ -107,6 +110,7 @@ function injectPanelStyles(): void {
 .dsh-pet-sprite-paste-box{margin-bottom:6px}
 .dsh-pet-sprite-set-err{border:1.5px solid #e8434e;border-radius:8px;background:#ffe9ec;color:#b32832;font-size:10.5px;font-weight:700;padding:6px 9px;margin:6px 0;line-height:1.5;word-break:break-word}
 .dsh-pet-sprite-log{border:1.5px solid #2a2f3e;border-radius:10px;background:#fffbe8;padding:7px 9px;margin-top:8px;font-size:11.5px;font-weight:600;line-height:1.7;color:#1f2430;white-space:pre-wrap;word-break:break-word}
+.dsh-pet-sprite-log-tag{display:inline-block;font-size:9.5px;font-weight:800;color:#9a8c4a;background:#fff3b8;border:1.5px solid #d9c86a;border-radius:999px;padding:0 7px;margin-bottom:5px}
 .dsh-pet-sprite-toast{position:fixed;z-index:960;background:#1f2430;color:#fff;font-size:12px;padding:7px 13px;border-radius:9px;box-shadow:0 4px 0 rgba(0,0,0,.2);animation:dshPetSpriteToast 2.6s ease forwards;max-width:260px}
 @keyframes dshPetSpriteToast{from{opacity:0;transform:translateY(8px)}10%,80%{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-6px)}}
 `
@@ -132,10 +136,11 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
   const [importError, setImportError] = useState<string | null>(null)
   // event-lines editor: collapsed by default, one textarea per event pool
   const [linesOpen, setLinesOpen] = useState(false)
-  // daily work log: today's cached entry shows on open, regenerate on click
-  const [logBusy, setLogBusy] = useState(false)
+  // work log (day / week): cached entries show on open, regenerate on click
+  const [logBusy, setLogBusy] = useState<'day' | 'week' | null>(null)
   const [logError, setLogError] = useState<string | null>(null)
-  const [logText, setLogText] = useState<string | null>(() => getWitnessDay().lastLog ?? null)
+  const [logText, setLogText] = useState<string | null>(() => getWitnessDay().lastLog ?? getWeekLog())
+  const [logScope, setLogScope] = useState<'day' | 'week'>(() => getWitnessDay().lastLog !== undefined ? 'day' : 'week')
   useEffect(() => { injectPanelStyles() }, [])
 
   const loadModels = useCallback(async () => {
@@ -198,6 +203,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
 
   // work-log summary numbers (read per render: cheap, stays fresh)
   const day = getWitnessDay()
+  const week = getWitnessWeek()
   const fmtChars = (n: number): string => n >= 10000 ? `${(n / 10000).toFixed(1)} 万字` : `${n} 字`
 
   const doPlay = (id: string) => {
@@ -238,19 +244,38 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
     refresh()
   }
 
-  // daily work log: today's journal numbers + persona go to the node route,
-  // which returns one log entry in the pet's voice. Regeneration is free
-  // (the user's own model), but the witness-fee coins land once per day.
-  const doWitness = async (): Promise<void> => {
-    if (logBusy) return
+  // work log: journal numbers + persona go to the node route, which returns
+  // one entry in the pet's voice — today's log or the last-7-days report.
+  // Regeneration is free (the user's own model); witness fees land once
+  // per day (20) and once per week (50).
+  const doWitness = async (scope: 'day' | 'week'): Promise<void> => {
+    if (logBusy !== null) return
     if (chatModel === null) {
       setLogError('还没有选择模型：先在「设置」里选一个。')
       return
     }
-    setLogBusy(true)
+    setLogBusy(scope)
     setLogError(null)
     try {
-      const day = getWitnessDay()
+      const day = scope === 'week'
+        ? (() => {
+            const w = getWitnessWeek()
+            return {
+              turns: w.turns, tasks: w.tasks, inChars: w.inChars, outChars: w.outChars,
+              spanMinutes: w.spanMinutes, night: w.nights > 0,
+              feed: w.feed, play: w.play, rest: w.rest, levelUps: w.levelUps,
+              activeDays: w.activeDays, nights: w.nights,
+            }
+          })()
+        : (() => {
+            const d = getWitnessDay()
+            return {
+              turns: d.turns, tasks: d.tasks, inChars: d.inChars, outChars: d.outChars,
+              spanMinutes: d.lastAt > d.firstAt ? Math.round((d.lastAt - d.firstAt) / 60000) : 0,
+              night: d.night,
+              feed: d.feed, play: d.play, rest: d.rest, levelUps: d.levelUps,
+            }
+          })()
       const res = await fetch('/plugins/dsh-pet-sprite/witness', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -260,18 +285,8 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
           lang: navigator.language,
           provider: chatModel.provider,
           model: chatModel.model,
-          day: {
-            turns: day.turns,
-            tasks: day.tasks,
-            inChars: day.inChars,
-            outChars: day.outChars,
-            spanMinutes: day.lastAt > day.firstAt ? Math.round((day.lastAt - day.firstAt) / 60000) : 0,
-            night: day.night,
-            feed: day.feed,
-            play: day.play,
-            rest: day.rest,
-            levelUps: day.levelUps,
-          },
+          scope,
+          day,
         }),
       })
       const data = await res.json().catch(() => ({})) as { log?: string; error?: string }
@@ -279,19 +294,22 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
       const log = (data.log ?? '').trim()
       if (log.length === 0) throw new Error('模型没有写出日志。')
       setLogText(log)
-      saveLogText(log)
+      setLogScope(scope)
+      if (scope === 'day') saveLogText(log)
+      else saveWeekLogText(log)
       onPetSay(log)
-      if (claimLogReward()) {
-        engine.shop.earnCoins(20, 'witness_log')
-        say('见证完成，+🪙20')
+      const claimed = scope === 'day' ? claimLogReward() : claimWeekReward()
+      if (claimed) {
+        engine.shop.earnCoins(scope === 'day' ? 20 : 50, `witness_${scope}`)
+        say(scope === 'day' ? '见证完成，+🪙20' : '本周见证完成，+🪙50')
       } else {
-        say('已更新今日日志')
+        say(scope === 'day' ? '已更新今日日志' : '已更新本周周报')
       }
       refresh()
     } catch (error) {
       setLogError(error instanceof Error ? error.message : String(error))
     } finally {
-      setLogBusy(false)
+      setLogBusy(null)
     }
   }
 
@@ -380,17 +398,34 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                 <h4>工作日志</h4>
                 <div className="dsh-pet-sprite-set-note">
                   今日：对话 {day.turns} 轮 · 完成 {day.tasks} 件 · 输出 {fmtChars(day.outChars)}
-                  {day.night ? ' · 凌晨仍在干活' : ''} —— {petName} 都看在眼里。
+                  {day.night ? ' · 凌晨仍在干活' : ''}
+                  <br />
+                  本周：活跃 {week.activeDays} 天 · 对话 {week.turns} 轮 · 输出 {fmtChars(week.outChars)}
+                  {week.nights > 0 ? ` · ${week.nights} 天熬到凌晨` : ''} —— {petName} 都看在眼里。
                 </div>
-                <button
-                  className="dsh-pet-sprite-btn dsh-pet-sprite-gen-btn"
-                  onClick={() => { void doWitness() }}
-                  disabled={logBusy}
-                >
-                  {logBusy ? '写日志中……' : logText !== null ? '重新生成今日日志' : '生成今日工作日志'}
-                </button>
+                <div className="dsh-pet-sprite-import-row">
+                  <button
+                    className="dsh-pet-sprite-btn"
+                    onClick={() => { void doWitness('day') }}
+                    disabled={logBusy !== null}
+                  >
+                    {logBusy === 'day' ? '写日报中……' : '生成日报'}
+                  </button>
+                  <button
+                    className="dsh-pet-sprite-btn"
+                    onClick={() => { void doWitness('week') }}
+                    disabled={logBusy !== null}
+                  >
+                    {logBusy === 'week' ? '写周报中……' : '生成周报'}
+                  </button>
+                </div>
                 {logError !== null && <div className="dsh-pet-sprite-set-err">{logError}</div>}
-                {logText !== null && <div className="dsh-pet-sprite-log">{logText}</div>}
+                {logText !== null && (
+                  <div className="dsh-pet-sprite-log">
+                    <div className="dsh-pet-sprite-log-tag">{logScope === 'day' ? '今日日报' : '本周周报'}</div>
+                    {logText}
+                  </div>
+                )}
               </div>
             </>
           )}
