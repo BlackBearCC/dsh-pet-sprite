@@ -90,6 +90,29 @@ export function memoryTexts(limit = 10): string[] {
   return loadMemories().slice(0, limit).map(m => m.text)
 }
 
+/**
+ * Merge agent-written memories from the shared server file into the local
+ * store (dedup by text). Boot-time adoption: what the DSH agent taught the
+ * pet in another session becomes part of this device's pet too.
+ */
+export async function mergeServerMemories(): Promise<void> {
+  try {
+    const res = await fetch('/plugins/dsh-pet-sprite/memories')
+    if (!res.ok) return
+    const data = await res.json() as { memories?: Array<{ text?: string; sessionTitle?: string; createdAt?: number }> }
+    const incoming = Array.isArray(data.memories) ? data.memories : []
+    const existing = new Set(loadMemories().map(m => m.text))
+    const fresh = incoming
+      .filter(m => m !== null && typeof m === 'object' && typeof m.text === 'string' && m.text.length > 0 && !existing.has(m.text as string))
+      .map(m => sanitize({ text: m.text, sessionTitle: m.sessionTitle ?? 'agent', createdAt: m.createdAt ?? Date.now() }))
+      .filter((m): m is PetMemory => m !== null)
+    if (fresh.length === 0) return
+    const next = [...fresh, ...loadMemories()].slice(0, MEMORY_LIMIT)
+    try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* best-effort */ }
+    schedulePush()
+  } catch { /* server hiccup: keep local memories */ }
+}
+
 // ─── extraction pacing ─────────────────────────────────────────────────────
 
 /** Bump the completed-task counter; true when an extraction is due. */

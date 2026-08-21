@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { defineTool } from '@deepseek-ai/dsh-tools'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fixGrid, GRID_W, GRID_H } from './pixel-format.ts'
@@ -101,6 +102,11 @@ interface LlmStreamChunk {
   type: string
   text?: string
   reason?: { kind?: string; failure?: { message?: string; code?: string } }
+}
+
+/** The host's default model selection (dsh-agent-default-model service). */
+interface AgentDefaultModelLike {
+  currentSelection(): { provider: string; model: string; reasoningEffort?: string }
 }
 
 interface LlmRuntimeLike {
@@ -413,6 +419,85 @@ function buildMessages(history: ChatTurn[], message: string, provider: string, m
 }
 
 export function apply(ctx: Context): void {
+  // ── shared pet memory (agent ↔ browser, one file) ─────────────────────────
+  // The pet's memories about the user live in ONE json file so the DSH agent
+  // (any session, via tools below) and the browser (via the /memory route,
+  // which now reads/writes the same file) witness the same growing record —
+  // cross-session continuity for both sides.
+  const storagesDir = (): string => {
+    const home = process.env.DSH_HOME ?? path.join(process.env.HOME ?? '/home', '.dsh')
+    return path.join(home, 'storages')
+  }
+  const memoryFile = (): string => path.join(storagesDir(), 'dsh-pet-sprite-memory.json')
+  interface MemoryRecord { id: string; text: string; sessionTitle: string; createdAt: number }
+  const readMemories = (): MemoryRecord[] => {
+    try {
+      const v = JSON.parse(fs.readFileSync(memoryFile(), 'utf8')) as unknown
+      if (!Array.isArray(v)) return []
+      return v.filter((m): m is MemoryRecord =>
+        m !== null && typeof m === 'object' && typeof (m as MemoryRecord).text === 'string' && (m as MemoryRecord).text.length > 0)
+    } catch { return [] }
+  }
+  const writeMemories = (list: MemoryRecord[]): void => {
+    fs.mkdirSync(storagesDir(), { recursive: true })
+    const tmp = memoryFile() + '.tmp'
+    // cap 30, newest first — same policy as the browser store
+    const capped = list.slice(0, 30)
+    fs.writeFileSync(tmp, JSON.stringify(capped))
+    fs.renameSync(tmp, memoryFile())
+  }
+
+  // agent tools: the DSH agent reads what the pet noticed about the user,
+  // and can teach the pet new facts on the user's behalf
+  try {
+    const tools = (ctx as unknown as { tools?: { register(t: unknown): unknown } }).tools
+    if (tools !== undefined) {
+      const { list, read, write } = {
+        list: defineTool({
+          name: 'pet_memory_list',
+          description: '列出宠物对主人的全部记忆（每条：内容 + 来源会话 + 时间）。宠物在用户工作时旁观察到的持久事实；跨会话可用。',
+          parameters: {},
+          output: { schema: { type: 'string' }, render: (_a: unknown, v: unknown) => [{ type: 'text', text: String(v) }] },
+          execute(): string {
+            const all = readMemories()
+            if (all.length === 0) return '（宠物还没有任何记忆）'
+            return all.map(m => `- ${m.text}（来源：${m.sessionTitle || '未知会话'}，${new Date(m.createdAt).toLocaleString('zh-CN')}）`).join('\n')
+          },
+        }),
+        read: defineTool({
+          name: 'pet_memory_search',
+          description: '按关键词检索宠物记忆（多关键词 AND）。先查这个再决定是否需要 pet_memory_list 全量。',
+          parameters: { keywords: { type: 'string', description: '空格分隔的关键词' } as never },
+          output: { schema: { type: 'string' }, render: (_a: unknown, v: unknown) => [{ type: 'text', text: String(v) }] },
+          execute(args: { keywords?: string }): string {
+            const kws = String(args.keywords ?? '').split(/\s+/).filter(Boolean)
+            if (kws.length === 0) return '（没有给出关键词）'
+            const hits = readMemories().filter(m => kws.every(k => m.text.includes(k)))
+            if (hits.length === 0) return '（没有命中）'
+            return hits.map(m => `- ${m.text}（来源：${m.sessionTitle || '未知会话'}）`).join('\n')
+          },
+        }),
+        write: defineTool({
+          name: 'pet_memory_write',
+          description: '给宠物写一条关于主人的新记忆（≤60字）。用户说「让宠物记住…」或 agent 判断有跨会话价值的持久事实时使用；重复事实会被去重拒绝。',
+          parameters: { text: { type: 'string', description: '记忆内容，宠物视角，≤60 字' } as never },
+          output: { schema: { type: 'string' }, render: (_a: unknown, v: unknown) => [{ type: 'text', text: String(v) }] },
+          execute(args: { text?: string }): string {
+            const text = String(args.text ?? '').trim().slice(0, 60)
+            if (text.length === 0) return '（内容为空）'
+            const all = readMemories()
+            if (all.some(m => m.text === text)) return '（已有相同记忆，未重复写入）'
+            writeMemories([{ id: `mem:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 6)}`, text, sessionTitle: 'agent 写入', createdAt: Date.now() }, ...all])
+            return `已记住：${text}`
+          },
+        }),
+      }
+      tools.register(list)
+      tools.register(read)
+      tools.register(write)
+    }
+  } catch { /* tools service absent (headless) — routes below still work */ }
+
   // Services are resolved lazily: on fast hosts this plugin's apply() can run
   // before the webServer/llm services finish initializing, and cordis'
   // ctx.get() (strict) returns undefined then — caching that value would
@@ -420,6 +505,7 @@ export function apply(ctx: Context): void {
   // and re-check at registration time; routes themselves answer 503 until
   // the llm service shows up.
   const llmNow = (): LlmRuntimeLike | undefined => ctx.get('llm') as LlmRuntimeLike | undefined
+  const defaultModelNow = (): AgentDefaultModelLike | undefined => ctx.get('agentDefaultModel') as AgentDefaultModelLike | undefined
   const webServerNow = (): WebServerLike | undefined => ctx.get('webServer') as WebServerLike | undefined
 
   const registerWhenReady = (register: (webServer: WebServerLike) => () => void): void => {
@@ -449,6 +535,16 @@ export function apply(ctx: Context): void {
         return
       }
       try {
+        // the DSH default model (agentDefaultModel service): the browser
+        // adopts it when the user never picked one — zero-config chat
+        // and generation out of the box
+        let def: { provider: string; model: string } | undefined
+        try {
+          const sel = defaultModelNow()?.currentSelection()
+          if (sel !== undefined && typeof sel.provider === 'string' && typeof sel.model === 'string') {
+            def = { provider: sel.provider, model: sel.model }
+          }
+        } catch { /* optional service — absence just omits the default */ }
         const providers = []
         for (const p of llm.listProviders()) {
             // one broken provider must not kill the whole list: surface the
@@ -469,7 +565,7 @@ export function apply(ctx: Context): void {
               })
             }
           }
-          json(res, 200, { providers })
+          json(res, 200, { providers, default: def })
         } catch (error) {
           json(res, 500, { error: error instanceof Error ? error.message : String(error) })
         }
@@ -676,11 +772,16 @@ export function apply(ctx: Context): void {
         }
         const petName = (body.petName ?? '').trim() || '小宠物'
         const lang = body.lang ?? 'zh'
-        const existing = (body.existing ?? [])
-          .filter((t): t is string => typeof t === 'string')
-          .map(t => t.trim().slice(0, 60))
-          .filter(t => t.length > 0)
-          .slice(0, 30)
+        // dedupe target: the SHARED memory file (agent-written facts count
+        // too), merged with what the browser already holds
+        const shared = readMemories().map(m => m.text)
+        const existing = [...new Set([
+          ...shared,
+          ...(body.existing ?? [])
+            .filter((t): t is string => typeof t === 'string')
+            .map(t => t.trim().slice(0, 60))
+            .filter(t => t.length > 0),
+        ])].slice(0, 30)
         const options = {
           provider,
           model,
@@ -694,10 +795,32 @@ export function apply(ctx: Context): void {
           maxTokens: 200,
         }
         const reply = await streamText(llm, options)
-        json(res, 200, { memories: parseMemories(reply) })
+        const fresh = parseMemories(reply)
+        if (fresh.length > 0) {
+          // persist to the shared file so ANY later DSH agent session (and
+          // every browser device) starts from the same memories
+          const known = new Set(readMemories().map(m => m.text))
+          const additions: MemoryRecord[] = fresh
+            .filter(t => !known.has(t))
+            .map(t => ({ id: `mem:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 6)}`, text: t, sessionTitle: petName + ' 观察', createdAt: Date.now() }))
+          if (additions.length > 0) writeMemories([...additions, ...readMemories()])
+        }
+        json(res, 200, { memories: fresh })
       } catch (error) {
         json(res, 500, { error: error instanceof Error ? error.message : String(error) })
       }
+    },
+  }))
+
+  // ── GET /plugins/dsh-pet-sprite/memory — shared memory feed ───────────────
+  // Browser boot hydration: adopt agent-written memories (they merge into
+  // the pet's bubble/chat context on every device).
+  registerWhenReady((webServer) => webServer.register({
+    kind: 'exact',
+    path: '/plugins/dsh-pet-sprite/memories',
+    handler: async (rawReq, rawRes) => {
+      const res = rawRes as ServerResponseLike
+      json(res, 200, { memories: readMemories() })
     },
   }))
 

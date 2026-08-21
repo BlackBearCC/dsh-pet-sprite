@@ -10,6 +10,7 @@
 // after the shared debounce.
 
 import { syncSlice, schedulePush, hydrateFromServer, flushNow } from './sync.ts'
+import { mergeServerMemories } from './memory.ts'
 
 /** Keys owned by ChatPet.tsx. */
 import { markSyncReady } from './sync-gate.ts'
@@ -107,6 +108,9 @@ export async function registerSyncSlices(): Promise<void> {
   hookPush()
   try {
     await hydrateFromServer()
+    // agent-written memories from the shared file join the local store
+    // (best-effort: a failed fetch keeps local memories untouched)
+    await mergeServerMemories()
   } finally {
     markSyncReady()
   }

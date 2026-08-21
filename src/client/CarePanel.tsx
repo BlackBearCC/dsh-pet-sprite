@@ -31,6 +31,8 @@ interface Props {
   onPetSay: (text: string) => void // speak through the pet's bubble (wrapped)
   onSpeakPool: (key: LineKey) => void // fire a pool-keyed speech event through the pet's bubble
   onBurst: (opts?: { count?: number; color?: string }) => void // fire a particle burst at the pet's position
+  /** Open the 45s runner mini-game (double-click on the pet does the same). */
+  onPlayRunner: () => void
   onSwitchPet: () => void // reopen the companion picker
   memories: PetMemory[] // the pet's stored memories about the user
   onRemoveMemory: (id: string) => void // drop one memory
@@ -72,46 +74,46 @@ function injectPanelStyles(): void {
   panelStyleInjected = true
   const s = document.createElement('style')
   s.textContent = `
-.dsh-pet-sprite-panel{position:fixed;z-index:950;width:260px;max-height:min(60vh,460px);display:flex;flex-direction:column;background:#ffffff;border:2px solid #2a2f3e;border-radius:12px;box-shadow:0 5px 0 rgba(0,0,0,.16),0 14px 32px rgba(0,0,0,.18);overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;pointer-events:auto}
+.dsh-pet-sprite-panel{position:fixed;z-index:950;width:260px;max-height:min(60vh,460px);display:flex;flex-direction:column;background:var(--dsw-alias-bg-layer-1,#ffffff);border:2px solid var(--dsw-alias-border-l3,#2a2f3e);border-radius:12px;box-shadow:0 5px 0 rgba(0,0,0,.16),0 14px 32px rgba(0,0,0,.18);overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:var(--dsw-alias-label-primary,#1f2430);pointer-events:auto}
 .dsh-pet-sprite-panel-hd{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:2px solid #2a2f3e;font-size:12px;font-weight:800;color:#1f2430}
-.dsh-pet-sprite-panel-hd .sub{font-weight:600;font-size:10.5px;color:#6b7280}
+.dsh-pet-sprite-panel-hd .sub{font-weight:600;font-size:10.5px;color:var(--dsw-alias-label-secondary,#6b7280)}
 .dsh-pet-sprite-panel-hd .coins{margin-left:auto;font-weight:800;font-size:11px;color:#b8860b;white-space:nowrap}
-.dsh-pet-sprite-panel-x{border:none;background:transparent;font-size:13px;cursor:pointer;color:#6b7280;padding:2px 5px;border-radius:6px;line-height:1}
+.dsh-pet-sprite-panel-x{border:none;background:transparent;font-size:13px;cursor:pointer;color:var(--dsw-alias-label-secondary,#6b7280);padding:2px 5px;border-radius:6px;line-height:1}
 .dsh-pet-sprite-panel-x:hover{background:#eef0f4;color:#1f2430}
 .dsh-pet-sprite-tabs{display:flex;border-bottom:1px solid #e5e7eb}
-.dsh-pet-sprite-tab{flex:1;border:none;background:transparent;padding:6px 0;font-size:11px;font-weight:700;color:#6b7280;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
+.dsh-pet-sprite-tab{flex:1;border:none;background:transparent;padding:6px 0;font-size:11px;font-weight:700;color:var(--dsw-alias-label-secondary,#6b7280);cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
 .dsh-pet-sprite-tab.on{color:#1f2430;border-bottom-color:#4f6ef7}
 .dsh-pet-sprite-tab:hover{color:#1f2430}
 .dsh-pet-sprite-panel-bd{overflow-y:auto;padding:8px 12px 12px;font-size:12px}
 .dsh-pet-sprite-panel-bd::-webkit-scrollbar{width:5px}
 .dsh-pet-sprite-panel-bd::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:999px}
 .dsh-pet-sprite-row{display:flex;align-items:center;gap:8px;margin:6px 0}
-.dsh-pet-sprite-row label{width:30px;flex:none;color:#6b7280;font-size:11px}
+.dsh-pet-sprite-row label{width:30px;flex:none;color:var(--dsw-alias-label-secondary,#6b7280);font-size:11px}
 .dsh-pet-sprite-bar{flex:1;height:8px;border-radius:999px;background:#e5e7eb;overflow:hidden}
 .dsh-pet-sprite-bar i{display:block;height:100%;border-radius:999px;transition:width .5s cubic-bezier(.2,.8,.4,1)}
 .dsh-pet-sprite-row b{width:78px;flex:none;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;font-size:10.5px;color:#1f2430}
-.dsh-pet-sprite-exp .cap{display:flex;justify-content:space-between;color:#6b7280;font-size:10.5px;margin:8px 0 3px}
-.dsh-pet-sprite-sec h4{margin:10px 0 5px;font-size:10px;color:#6b7280;font-weight:800;letter-spacing:.5px}
+.dsh-pet-sprite-exp .cap{display:flex;justify-content:space-between;color:var(--dsw-alias-label-secondary,#6b7280);font-size:10.5px;margin:8px 0 3px}
+.dsh-pet-sprite-sec h4{margin:10px 0 5px;font-size:10px;color:var(--dsw-alias-label-secondary,#6b7280);font-weight:800;letter-spacing:.5px}
 .dsh-pet-sprite-acts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
 .dsh-pet-sprite-btn{border:1.5px solid #2a2f3e;background:#f6f7fa;border-radius:8px;padding:6px 2px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:#1f2430;transition:transform .12s,background .12s}
 .dsh-pet-sprite-btn:hover{background:#eef0f4}
 .dsh-pet-sprite-btn:active{transform:scale(.94)}
 .dsh-pet-sprite-btn:disabled{opacity:.4;cursor:not-allowed}
-.dsh-pet-sprite-item{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:8px;border:1.5px solid #e5e7eb;margin-bottom:5px;background:#fff}
+.dsh-pet-sprite-item{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:8px;border:1.5px solid var(--dsw-alias-border-l2,#e5e7eb);margin-bottom:5px;background:var(--dsw-alias-bg-layer-1,#fff)}
 .dsh-pet-sprite-item .ic{font-size:14px;flex:none}
 .dsh-pet-sprite-item .nm{font-weight:700;flex:none;font-size:11.5px;color:#1f2430;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dsh-pet-sprite-item .fx{color:#6b7280;flex:1;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dsh-pet-sprite-item .qty{flex:none;font-variant-numeric:tabular-nums;color:#6b7280;font-size:10.5px}
+.dsh-pet-sprite-item .fx{color:var(--dsw-alias-label-secondary,#6b7280);flex:1;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-pet-sprite-item .qty{flex:none;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary,#6b7280);font-size:10.5px}
 .dsh-pet-sprite-buy{flex:none;border:1.5px solid #2a2f3e;border-radius:6px;padding:2.5px 8px;font-size:10.5px;font-weight:800;cursor:pointer;background:#ffd33d;color:#1f2430;font-family:inherit}
 .dsh-pet-sprite-buy:disabled{opacity:.35;cursor:not-allowed}
 .dsh-pet-sprite-buy:not(:disabled):active{transform:scale(.94)}
-.dsh-pet-sprite-switch{display:block;width:100%;margin-top:12px;color:#6b7280;background:#fff}
-.dsh-pet-sprite-set-note{color:#6b7280;font-size:10.5px;line-height:1.6;margin:4px 0 8px}
-.dsh-pet-sprite-set select{width:100%;border:1.5px solid #2a2f3e;border-radius:8px;padding:6px 8px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;background:#fff;margin-bottom:8px;outline:none}
-.dsh-pet-sprite-set label{display:block;font-size:10.5px;font-weight:800;color:#6b7280;margin:8px 0 4px}
-.dsh-pet-sprite-set textarea{display:block;width:100%;box-sizing:border-box;border:1.5px solid #2a2f3e;border-radius:8px;padding:6px 8px;font:600 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;background:#fff;outline:none;resize:vertical;min-height:54px;margin-bottom:4px}
-.dsh-pet-sprite-set textarea:focus,.dsh-pet-sprite-set input:focus{background:#fffbe8}
-.dsh-pet-sprite-set input{display:block;width:100%;box-sizing:border-box;border:1.5px solid #2a2f3e;border-radius:8px;padding:6px 8px;font:600 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;background:#fff;outline:none;margin-bottom:6px}
+.dsh-pet-sprite-switch{display:block;width:100%;margin-top:12px;color:var(--dsw-alias-label-secondary,#6b7280);background:var(--dsw-alias-bg-layer-1,#fff)}
+.dsh-pet-sprite-set-note{color:var(--dsw-alias-label-secondary,#6b7280);font-size:10.5px;line-height:1.6;margin:4px 0 8px}
+.dsh-pet-sprite-set select{width:100%;border:1.5px solid #2a2f3e;border-radius:8px;padding:6px 8px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;background:var(--dsw-alias-bg-layer-1,#fff);margin-bottom:8px;outline:none}
+.dsh-pet-sprite-set label{display:block;font-size:10.5px;font-weight:800;color:var(--dsw-alias-label-secondary,#6b7280);margin:8px 0 4px}
+.dsh-pet-sprite-set textarea{display:block;width:100%;box-sizing:border-box;border:1.5px solid #2a2f3e;border-radius:8px;padding:6px 8px;font:600 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;background:var(--dsw-alias-bg-layer-1,#fff);outline:none;resize:vertical;min-height:54px;margin-bottom:4px}
+.dsh-pet-sprite-set textarea:focus,.dsh-pet-sprite-set input:focus{background:var(--dsw-specific-bubble,#fffbe8)}
+.dsh-pet-sprite-set input{display:block;width:100%;box-sizing:border-box;border:1.5px solid #2a2f3e;border-radius:8px;padding:6px 8px;font:600 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;background:var(--dsw-alias-bg-layer-1,#fff);outline:none;margin-bottom:6px}
 .dsh-pet-sprite-gen-btn{display:block;width:100%;margin-top:2px}
 .dsh-pet-sprite-lines-toggle{display:block;width:100%;margin-top:8px;color:#4f6ef7;background:#f0f3ff}
 .dsh-pet-sprite-lines-toggle:hover{background:#e3e9ff}
@@ -122,9 +124,9 @@ function injectPanelStyles(): void {
 .dsh-pet-sprite-import-row .dsh-pet-sprite-btn{flex:1}
 .dsh-pet-sprite-paste-box{margin-bottom:6px}
 .dsh-pet-sprite-set-err{border:1.5px solid #e8434e;border-radius:8px;background:#ffe9ec;color:#b32832;font-size:10.5px;font-weight:700;padding:6px 9px;margin:6px 0;line-height:1.5;word-break:break-word}
-.dsh-pet-sprite-log{border:1.5px solid #2a2f3e;border-radius:10px;background:#fffbe8;padding:7px 9px;margin-top:8px;font-size:11.5px;font-weight:600;line-height:1.7;color:#1f2430;white-space:pre-wrap;word-break:break-word}
-.dsh-pet-sprite-log-tag{display:inline-block;font-size:9.5px;font-weight:800;color:#9a8c4a;background:#fff3b8;border:1.5px solid #d9c86a;border-radius:999px;padding:0 7px;margin-bottom:5px}
-.dsh-pet-sprite-mem{position:relative;border:1.5px solid #e5e7eb;border-radius:8px;background:#fafbff;padding:5px 24px 5px 8px;margin-bottom:5px}
+.dsh-pet-sprite-log{border:1.5px solid #2a2f3e;border-radius:10px;background:var(--dsw-specific-bubble,#fffbe8);padding:7px 9px;margin-top:8px;font-size:11.5px;font-weight:600;line-height:1.7;color:#1f2430;white-space:pre-wrap;word-break:break-word}
+.dsh-pet-sprite-log-tag{display:inline-block;font-size:9.5px;font-weight:800;color:var(--dsw-alias-label-secondary,#9a8c4a);background:var(--dsw-alias-state-warn-tertiary,#fff3b8);border:1.5px solid #d9c86a;border-radius:999px;padding:0 7px;margin-bottom:5px}
+.dsh-pet-sprite-mem{position:relative;border:1.5px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:8px;background:#fafbff;padding:5px 24px 5px 8px;margin-bottom:5px}
 .dsh-pet-sprite-mem .tx{font-size:11px;font-weight:700;color:#1f2430;line-height:1.5;word-break:break-word}
 .dsh-pet-sprite-mem .mt{font-size:9.5px;color:#9ca3af;margin-top:2px}
 .dsh-pet-sprite-mem-x{position:absolute;top:4px;right:4px;border:none;background:transparent;color:#9ca3af;font-size:12px;line-height:1;cursor:pointer;padding:2px 4px;border-radius:5px}
@@ -137,7 +139,7 @@ function injectPanelStyles(): void {
   document.head.appendChild(s)
 }
 
-export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, customCount, onImportPet, onPetSay, onSpeakPool, onBurst, onSwitchPet, memories, onRemoveMemory, autoMemory, onAutoMemoryChange, workspace, onClose }) => {
+export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, customCount, onImportPet, onPetSay, onSpeakPool, onBurst, onPlayRunner, onSwitchPet, memories, onRemoveMemory, autoMemory, onAutoMemoryChange, workspace, onClose }) => {
   const [, bump] = useState(0)
   const [tab, setTab] = useState<'status' | 'bag' | 'shop' | 'set'>('status')
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
@@ -408,6 +410,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                 <div className="dsh-pet-sprite-acts">
                   <button className="dsh-pet-sprite-btn" onClick={() => doPlay('hide_seek')}>捉迷藏</button>
                   <button className="dsh-pet-sprite-btn" onClick={() => doPlay('sunbathe')}>晒太阳</button>
+                  <button className="dsh-pet-sprite-btn" onClick={onPlayRunner}>▶ 跑酷 45 秒</button>
                   <button className="dsh-pet-sprite-btn" onClick={doRest}>睡一会</button>
                 </div>
               </div>

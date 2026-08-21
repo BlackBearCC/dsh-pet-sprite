@@ -3,6 +3,7 @@ import { MiniEngine } from './game/mini-engine.ts'
 import { CarePanel } from './CarePanel.tsx'
 import { PetChatBox, type ChatModel, type ChatTurn } from './PetChatBox.tsx'
 import { PetPicker } from './PetPicker.tsx'
+import { runRunnerGame } from './runner-game.ts'
 import {
   DEFAULT_LINES, EMPTY_PROFILE, framesFromRows, importFromText, loadCustomPets,
   loadProfiles, parseProfile, pickLine, saveCustomPet, saveProfile, speakLine,
@@ -155,9 +156,9 @@ function injectStyles(): void {
 .dsh-pet-sprite-unit canvas{width:100%;height:100%;image-rendering:pixelated;display:block}
 .dsh-pet-sprite-spark{position:absolute;z-index:6;width:6px;height:6px;background:#ffd33d;border:1px solid rgba(0,0,0,.25);pointer-events:none;animation:dshPetSpriteSpark .6s ease-out forwards}
 @keyframes dshPetSpriteSpark{to{transform:translate(var(--dx),var(--dy));opacity:0}}
-.dsh-pet-sprite-ctl{position:absolute;top:-30px;right:-8px;z-index:6;font:800 10.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.18);border-radius:999px;padding:3px 10px;color:#7b8190;pointer-events:none;box-shadow:0 2px 0 rgba(0,0,0,.12);white-space:nowrap;transition:opacity .55s}
-.dsh-pet-sprite-bubble{position:absolute;bottom:calc(100% + 9px);left:50%;z-index:7;max-width:190px;background:#fff;border:2.5px solid #4a4553;border-radius:12px;padding:4px 11px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#4a4553;white-space:nowrap;pointer-events:none;box-shadow:0 2.5px 0 rgba(0,0,0,.15);animation:dshPetSpriteBubbleIn .5s cubic-bezier(.2,1.7,.4,1) both}
-.dsh-pet-sprite-bubble::after{content:'';position:absolute;top:calc(100% - 6.5px);left:50%;width:11px;height:11px;background:#fff;border-right:2.5px solid #4a4553;border-bottom:2.5px solid #4a4553;transform:translateX(-50%) rotate(45deg)}
+.dsh-pet-sprite-ctl{position:absolute;top:-30px;right:-8px;z-index:6;font:800 10.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.18);border-radius:999px;padding:3px 10px;color:var(--dsw-alias-label-secondary,#7b8190);pointer-events:none;box-shadow:0 2px 0 rgba(0,0,0,.12);white-space:nowrap;transition:opacity .55s}
+.dsh-pet-sprite-bubble{position:absolute;bottom:calc(100% + 9px);left:50%;z-index:7;max-width:190px;background:var(--dsw-alias-bg-layer-1,#fff);border:2.5px solid var(--dsw-alias-label-primary,#4a4553);border-radius:12px;padding:4px 11px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:var(--dsw-alias-label-primary,#4a4553);white-space:nowrap;pointer-events:none;box-shadow:0 2.5px 0 rgba(0,0,0,.15);animation:dshPetSpriteBubbleIn .5s cubic-bezier(.2,1.7,.4,1) both}
+.dsh-pet-sprite-bubble::after{content:'';position:absolute;top:calc(100% - 6.5px);left:50%;width:11px;height:11px;background:var(--dsw-alias-bg-layer-1,#fff);border-right:2.5px solid #4a4553;border-bottom:2.5px solid #4a4553;transform:translateX(-50%) rotate(45deg)}
 .dsh-pet-sprite-bubble-wrap{white-space:pre-wrap;word-break:break-word;max-width:230px;line-height:1.6;text-align:left}
 @keyframes dshPetSpriteBubbleIn{from{opacity:0;transform:translateX(-50%) translateY(9px) scale(.55)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
 .dsh-pet-sprite-unit{cursor:grab}
@@ -165,7 +166,7 @@ function injectStyles(): void {
 .dsh-pet-sprite-unit.dsh-pet-sprite-dragging{filter:drop-shadow(0 7px 9px rgba(0,0,0,.24))}
 .dsh-pet-sprite-dragging canvas{animation:dshPetSpriteHang .8s ease-in-out infinite alternate}
 @keyframes dshPetSpriteHang{from{transform:rotate(-8deg) scale(1.1)}to{transform:rotate(8deg) scale(1.1)}}
-.dsh-pet-sprite-status{position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);z-index:6;font:800 9.5px ui-monospace,Menlo,Consolas,monospace;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.14);border-radius:999px;padding:1px 8px;color:#7b8190;pointer-events:none;white-space:nowrap;box-shadow:0 2px 0 rgba(0,0,0,.10)}
+.dsh-pet-sprite-status{position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);z-index:6;font:800 9.5px ui-monospace,Menlo,Consolas,monospace;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.14);border-radius:999px;padding:1px 8px;color:var(--dsw-alias-label-secondary,#7b8190);pointer-events:none;white-space:nowrap;box-shadow:0 2px 0 rgba(0,0,0,.10)}
 .dsh-pet-sprite-egg{position:absolute;left:58px;bottom:14px;width:48px;height:56px;pointer-events:auto;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 2.5px 0 rgba(0,0,0,.13));animation:dshPetSpriteEggIn .6s cubic-bezier(.2,1.7,.4,1) both}
 .dsh-pet-sprite-egg canvas{width:100%;height:100%;image-rendering:pixelated;display:block;animation:dshPetSpriteEggWobble 4.8s ease-in-out infinite,dshPetSpriteEggGlow 3.2s ease-in-out infinite;transform-origin:50% 92%}
 @keyframes dshPetSpriteEggIn{from{opacity:0;transform:translateY(18px) scale(.5)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -174,9 +175,15 @@ function injectStyles(): void {
 .dsh-pet-sprite-egg:hover{filter:drop-shadow(0 5px 7px rgba(0,0,0,.2)) drop-shadow(0 0 5px rgba(143,208,255,.45))}
 .dsh-pet-sprite-egg:hover canvas{animation:dshPetSpriteEggGlow 1.6s ease-in-out infinite;transform:rotate(-6deg) scale(1.08)}
 .dsh-pet-sprite-egg:active canvas{transform:rotate(-9deg) scale(.96)}
-.dsh-pet-sprite-egg-hint{position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);background:#fff;border:2.5px solid #4a4553;border-radius:12px;padding:3px 11px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#4a4553;white-space:nowrap;pointer-events:none;box-shadow:0 2.5px 0 rgba(0,0,0,.15);animation:dshPetSpriteEggHint .5s cubic-bezier(.2,1.7,.4,1) both}
-.dsh-pet-sprite-egg-hint::after{content:'';position:absolute;top:calc(100% - 6.5px);left:50%;width:11px;height:11px;background:#fff;border-right:2.5px solid #4a4553;border-bottom:2.5px solid #4a4553;transform:translateX(-50%) rotate(45deg)}
+.dsh-pet-sprite-egg-hint{position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);background:var(--dsw-alias-bg-layer-1,#fff);border:2.5px solid var(--dsw-alias-label-primary,#4a4553);border-radius:12px;padding:3px 11px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:var(--dsw-alias-label-primary,#4a4553);white-space:nowrap;pointer-events:none;box-shadow:0 2.5px 0 rgba(0,0,0,.15);animation:dshPetSpriteEggHint .5s cubic-bezier(.2,1.7,.4,1) both}
+.dsh-pet-sprite-egg-hint::after{content:'';position:absolute;top:calc(100% - 6.5px);left:50%;width:11px;height:11px;background:var(--dsw-alias-bg-layer-1,#fff);border-right:2.5px solid #4a4553;border-bottom:2.5px solid #4a4553;transform:translateX(-50%) rotate(45deg)}
 @keyframes dshPetSpriteEggHint{from{opacity:0;transform:translateX(-50%) translateY(8px) scale(.55)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+.dsh-pet-sprite-runner{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center}
+.dsh-pet-sprite-runner-dim{position:absolute;inset:0;background:rgba(20,24,32,.45)}
+.dsh-pet-sprite-runner-stage{position:relative;width:min(92vw,660px);background:var(--dsw-alias-bg-layer-1,#fff);border:3px solid var(--dsw-alias-label-primary,#4a4553);border-radius:14px;box-shadow:0 10px 0 rgba(0,0,0,.25);padding:10px;animation:dshPetSpriteRunnerIn .3s cubic-bezier(.2,1.5,.4,1) both;cursor:pointer}
+@keyframes dshPetSpriteRunnerIn{from{opacity:0;transform:translateY(20px) scale(.92)}to{opacity:1;transform:none}}
+.dsh-pet-sprite-runner-stage canvas{display:block;border-radius:8px;image-rendering:pixelated}
+.dsh-pet-sprite-runner-hint{font:700 11px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:var(--dsw-alias-label-tertiary,#9a95a5);text-align:center;padding-top:7px}
 @media (prefers-reduced-motion:reduce){.dsh-pet-sprite-plus{animation-duration:.4s}.dsh-pet-sprite-egg{animation-duration:.01s}.dsh-pet-sprite-egg canvas{animation:none}.dsh-pet-sprite-egg-hint{animation-duration:.01s}}
 `
   document.head.appendChild(style)
@@ -253,6 +260,31 @@ const ChatPetImpl: FC = () => {
   // petId, and the petId effect below would otherwise never inject them)
   useEffect(() => { injectStyles() }, [])
 
+  // zero-config model: when the user never picked a chat model, adopt the
+  // DSH default (agentDefaultModel service, surfaced by the /models route)
+  // so chat + generation work out of the box; an explicit choice in the
+  // care panel always wins and persists
+  useEffect(() => {
+    if (loadChatModel() !== null) return
+    let done = false
+    void (async () => {
+      try {
+        const res = await fetch('/plugins/dsh-pet-sprite/models')
+        if (!res.ok) return
+        const data = await res.json().catch(() => ({})) as { default?: { provider?: string; model?: string } }
+        const d = data.default
+        if (done || d === undefined || typeof d.provider !== 'string' || typeof d.model !== 'string') return
+        if (d.provider.length === 0 || d.model.length === 0) return
+        // only adopt when nothing was picked meanwhile (user raced us)
+        if (loadChatModel() !== null) return
+        const m: ChatModel = { provider: d.provider, model: d.model }
+        saveChatModel(m)
+        setChatModel(m)
+      } catch { /* server hiccup: stay unconfigured, panel guides the pick */ }
+    })()
+    return () => { done = true }
+  }, [])
+
   // workspace tracker: a real session switch fires the pet's "changed
   // work site" line (throttled — flipping through the session list must
   // not machine-gun bubbles)
@@ -280,7 +312,8 @@ const ChatPetImpl: FC = () => {
       saveChatHistory(next)
       return next
     })
-    if (chatModel === null) {
+    const model = chatModelRef.current
+    if (model === null) {
       setChatError('还没有选择聊天模型：在照顾面板 → 设置 里选一个再试。')
       return
     }
@@ -296,8 +329,8 @@ const ChatPetImpl: FC = () => {
           petName: activePet.name,
           message: text,
           history: history.slice(0, -1),
-          provider: chatModel.provider,
-          model: chatModel.model,
+          provider: model.provider,
+          model: model.model,
           lang: navigator.language,
           persona: activeProfile.persona,
           workspace: { current: workspace.currentTitle, recent: workspace.recentTitles },
@@ -331,7 +364,8 @@ const ChatPetImpl: FC = () => {
   const generateInFlightRef = useRef(false)
   const handleGeneratePet = async (description: string): Promise<{ ok: boolean; name?: string; error?: string }> => {
     if (generateInFlightRef.current) return { ok: false, error: '正在生成中，稍等一下。' }
-    if (chatModel === null) {
+    const model = chatModelRef.current
+    if (model === null) {
       return { ok: false, error: '还没有选择模型：先在上方「聊天模型」里选一个。' }
     }
     // the first custom companion is free — the picker's egg-time entry
@@ -350,8 +384,8 @@ const ChatPetImpl: FC = () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           description,
-          provider: chatModel.provider,
-          model: chatModel.model,
+          provider: model.provider,
+          model: model.model,
           lang: navigator.language,
         }),
       })
@@ -1036,10 +1070,35 @@ const ChatPetImpl: FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [petId])
 
+  // mini runner: double-click the pet (or the care panel's play button) for
+  // a 45s play break. Coins earned land in the shop wallet; mood gets a
+  // play bump through the same speakPool/burst the panel uses.
+  const runnerBusyRef = useRef(false)
+  const startRunner = (): void => {
+    if (runnerBusyRef.current || activePet === null) return
+    runnerBusyRef.current = true
+    void runRunnerGame(activePet.frames, n => {
+      if (n <= 0) return
+      engine.shop.earnCoins(n, 'runner_game')
+      speakPool('play')
+      burst({ count: 6, color: '#ffd33d' })
+    }).then(result => {
+      if (result.score > 0) {
+        sayRef.current(`跑酷结束！${result.score} 分${result.coins > 0 ? `，赚了 ${result.coins} 星币` : ''}。`)
+      }
+      runnerBusyRef.current = false
+    }).catch(() => { runnerBusyRef.current = false })
+  }
+
   return (
     <div ref={layerRef} className="dsh-pet-sprite-layer">
       {activePet !== null && (
-        <div ref={unitRef} className="dsh-pet-sprite-unit" title={`${activePet.name}（左键聊天 · 右键照顾面板）`}>
+        <div
+          ref={unitRef}
+          className="dsh-pet-sprite-unit"
+          title={`${activePet.name}（左键聊天 · 右键照顾面板 · 双击玩跑酷）`}
+          onDoubleClick={startRunner}
+        >
           <span ref={ctlRef} className="dsh-pet-sprite-ctl" />
           <canvas ref={canvasRef} width={96} height={112} />
           <span ref={statusRef} className="dsh-pet-sprite-status" />
@@ -1070,6 +1129,7 @@ const ChatPetImpl: FC = () => {
           onPetSay={(text) => sayRef.current(text, true)}
           onSpeakPool={speakPool}
           onBurst={(opts) => burstRef.current(opts)}
+          onPlayRunner={startRunner}
           onSwitchPet={openPicker}
           memories={memories}
           onRemoveMemory={(id) => { setMemories(removeMemory(id)) }}
@@ -1100,7 +1160,7 @@ const ChatPetImpl: FC = () => {
           profiles={profiles}
           onPick={handlePick}
           onClose={() => setPickerOpen(false)}
-          onGeneratePet={chatModel === null ? undefined : handleGeneratePet}
+          onGeneratePet={handleGeneratePet}
           firstGenerateFree={customPets.length === 0}
         />
       )}
