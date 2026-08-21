@@ -249,17 +249,22 @@ function parseMemories(reply: string): string[] {
 
 /**
  * Sprite-generator prompt: the model must answer with one JSON object
- * {name, tagline, rows}. The grid spec mirrors pixel-format.ts exactly.
+ * containing the pixel grid, persona, and event lines for every pool key.
+ * The grid spec mirrors pixel-format.ts exactly; the line keys mirror
+ * custom-pets.ts LINE_KEYS so a generated companion arrives fully voiced.
  */
 function generatePrompt(description: string): string {
   return [
-    'You are a pixel-art sprite generator. Output ONLY one JSON object, no markdown fences, no commentary:',
-    `{"name":"<pet name, 2-6 characters, same language as the description>","tagline":"<one-line personality, max 16 characters, same language>","rows":[<${GRID_H} strings, each exactly ${GRID_W} characters>]}`,
+    'You are a pixel-art sprite and character generator. Output ONLY one JSON object, no markdown fences, no commentary:',
+    `{"name":"<pet name, 2-6 characters, same language as the description>","tagline":"<one-line personality, max 16 characters, same language>","persona":"<2-3 sentence personality description in the same language as the description>","rows":[<${GRID_H} strings, each exactly ${GRID_W} characters>],"lines":{"idle":[...],"work":[...],"done":[...],"low":[...],"feed":[...],"play":[...],"rest":[...],"switch":[...],"memory":[...],"think":[...],"error":[...],"ctl":[...],"drag":[...],"intro":[...]}}`,
     `Grid rules: ${GRID_W} columns x ${GRID_H} rows; '.' = transparent background.`,
     `Palette single characters (meaning: color): o=#4a4553 ink outline; h=#f6f7fc white; H=#dcdff0 white shade; s=#ffe9dc skin; S=#f2cdb9 skin shade; e=#3c3744 eye dark; X=#ffffff white; w=#ffffff white; t=#e8434e red; T=#b32832 dark red; k=#9c6640 brown; K=#7d4e2c dark brown; b=#ffb3ae blush; m=#e8927c mouth; l=#39496b navy; g=#8fd0ff light blue; z=#8fa3c8 gray blue; f=#f4a45c orange; F=#d9803a dark orange; p=#f2839b pink; u=#4d6efa vivid blue; c=#e7edff pale.`,
     'Every colored region must be enclosed by a 1px o outline so the sprite reads on any background.',
     'The character: cute chibi proportions, head about half the height, simple readable silhouette, centered horizontally (columns 4-19), feet near row 26, two e eyes, one small m mouth. Use 2-4 palette colors plus the o outline.',
     'Every row string is exactly 24 characters. Aim for readable, not detailed.',
+    'Lines: each key maps to an array of 2-3 short bubble lines (max 14 chars each) in the pet\'s voice and the same language as the description. Write lines that fit the character\'s personality. Keys:',
+    '  idle = ambient chatter while idling; work = agent starts streaming; done = agent turn completes; low = mood/power/health bad; feed = after being fed; play = after play; rest = after resting; switch = user changed work session; memory = pet memorized something new; think = chat request in flight; error = chat failed; ctl = WASD takeover begins; drag = being dragged; intro = first shown after birth.',
+    '  The intro key may use {name} as a placeholder for the pet\'s name.',
     `Description of the pet to draw: ${description}`,
   ].join('\n')
 }
@@ -308,19 +313,28 @@ function witnessPrompt(lang: string, scope: 'day' | 'week', day: WitnessDayPaylo
 }
 
 /** Parse the generator reply: strip fences, find the JSON, fix the grid. */
-function parseGeneratedPet(reply: string): { name: string; tagline: string; rows: string[] } {
+function parseGeneratedPet(reply: string): { name: string; tagline: string; rows: string[]; persona?: string; lines?: Record<string, string[]> } {
   let text = reply.trim()
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
   if (fence !== null) text = fence[1].trim()
   const start = text.indexOf('{')
   const end = text.lastIndexOf('}')
   if (start < 0 || end <= start) throw new Error('model did not return a JSON object')
-  const data = JSON.parse(text.slice(start, end + 1)) as { name?: unknown; tagline?: unknown; rows?: unknown }
+  const data = JSON.parse(text.slice(start, end + 1)) as { name?: unknown; tagline?: unknown; rows?: unknown; persona?: unknown; lines?: unknown }
   const name = typeof data.name === 'string' && data.name.trim().length > 0 ? data.name.trim().slice(0, 12) : '小家伙'
   const tagline = typeof data.tagline === 'string' && data.tagline.trim().length > 0 ? data.tagline.trim().slice(0, 24) : ''
   const grid = fixGrid(data.rows)
   if ('error' in grid) throw new Error(grid.error)
-  return { name, tagline, rows: grid.rows }
+  const persona = typeof data.persona === 'string' && data.persona.trim().length > 0 ? data.persona.trim().slice(0, 500) : undefined
+  const lines = data.lines !== null && typeof data.lines === 'object' && !Array.isArray(data.lines)
+    ? Object.fromEntries(
+        Object.entries(data.lines as Record<string, unknown>)
+          .filter(([, v]) => Array.isArray(v))
+          .map(([k, v]) => [k, (v as unknown[]).filter((s): s is string => typeof s === 'string').map(s => s.trim().slice(0, 24)).filter(s => s.length > 0).slice(0, 8)])
+          .filter(([, v]) => v.length > 0),
+      )
+    : undefined
+  return { name, tagline, rows: grid.rows, persona, lines }
 }
 
 async function readBody(req: ServerRequestLike, limitBytes = 64 * 1024): Promise<string> {
@@ -503,7 +517,7 @@ export function apply(ctx: Context): void {
               content: [{ type: 'text', text: generatePrompt(description) }],
               source: { kind: 'plugin', plugin: 'dsh-pet-sprite' },
             }],
-            maxTokens: 1200,
+            maxTokens: 2000,
           }
           const reply = await streamText(llm, options)
           const pet = parseGeneratedPet(reply)

@@ -4,8 +4,9 @@ import { CarePanel } from './CarePanel.tsx'
 import { PetChatBox, type ChatModel, type ChatTurn } from './PetChatBox.tsx'
 import { PetPicker } from './PetPicker.tsx'
 import {
-  EMPTY_PROFILE, framesFromRows, importFromText, loadCustomPets, loadProfiles,
-  saveCustomPet, saveProfile, type CustomPet, type PetProfile,
+  DEFAULT_LINES, EMPTY_PROFILE, framesFromRows, importFromText, loadCustomPets,
+  loadProfiles, parseProfile, pickLine, saveCustomPet, saveProfile, speakLine,
+  type CustomPet, type LineKey, type PetProfile,
 } from './custom-pets.ts'
 import { drawPet, EGG_ROWS, PET_ART, PET_IDS, PET_META, type Frames, type PetId } from './pet-art.ts'
 import { isCustomPetId } from '../pixel-format.ts'
@@ -108,23 +109,6 @@ type PetMode = 'idle' | 'work'
 
 interface Platform { x1: number; x2: number; y: number }
 
-// ── chat bubble lines (short, ≤ 14 chars keeps the bubble compact) ───────────
-const CHAT_LINES = {
-  idle: [
-    '今天的代码顺利吗?', '站得有点久了……', '云看起来像棉花糖。',
-    '悄悄说:我在攒星币。', '要不要休息一下?', '这边风景不错。',
-  ],
-  ctl: ['交给我!', '看我的!', '出发!'],
-  work: ['开工啦。', '让我盯着点……', '在忙,勿扰。'],
-  done: ['呼——完成啦。', '又搞定一轮!', '辛苦辛苦。'],
-  low: ['有点累了,想休息……', '心情不太好,陪我玩玩?', '能量快见底了……'],
-  switch: ['换个地方啦。', '这个工地我来过吗?', '先熟悉一下环境。', '接着陪主人干活。'],
-  drag: ['放我下来!', '抓稳了……', '飞起来咯!'],
-} as const
-function pick(pool: readonly string[]): string {
-  return pool[Math.floor(Math.random() * pool.length)]
-}
-
 // ── styles ───────────────────────────────────────────────────────────────────
 let styleInjected = false
 function injectStyles(): void {
@@ -211,6 +195,13 @@ export const ChatPet: FC = () => {
   const workspaceRef = useRef(workspace)
   workspaceRef.current = workspace
 
+  // Pool speech entry point: every pet utterance flows through here.
+  // Text events (chat replies, witness logs) call sayRef directly —
+  // those carry dynamic content, not pool lines.
+  const speakPool = (key: LineKey): void => {
+    sayRef.current(speakLine(profileRef.current, key, { name: petNameRef.current }))
+  }
+
   const handlePick = (id: string): void => {
     savePetId(id)
     setPickerOpen(false)
@@ -236,7 +227,7 @@ export const ChatPet: FC = () => {
         const now = Date.now()
         if (now - lastSwitchAt < 30_000) return
         lastSwitchAt = now
-        sayRef.current(pick(profileRef.current.lines.switch ?? CHAT_LINES.switch))
+        speakPool('switch')
       },
     )
   }, [])
@@ -257,7 +248,7 @@ export const ChatPet: FC = () => {
       return
     }
     setChatBusy(true)
-    sayRef.current('让我想想……')
+    speakPool('think')
     try {
       const history = [...chatHistory, { role: 'user' as const, text }]
         .map(t => ({ role: t.role === 'user' ? 'user' as const : 'assistant' as const, content: t.text }))
@@ -287,7 +278,7 @@ export const ChatPet: FC = () => {
       sayRef.current(reply.length > 150 ? `${reply.slice(0, 150)}…` : reply, true)
     } catch (error) {
       setChatError(error instanceof Error ? error.message : String(error))
-      sayRef.current('呜……卡住了。')
+      speakPool('error')
     } finally {
       setChatBusy(false)
     }
@@ -322,7 +313,10 @@ export const ChatPet: FC = () => {
           lang: navigator.language,
         }),
       })
-      const data = await res.json().catch(() => ({})) as { name?: string; tagline?: string; rows?: string[]; error?: string }
+      const data = await res.json().catch(() => ({})) as {
+        name?: string; tagline?: string; rows?: string[]
+        persona?: string; lines?: Record<string, string[]>; error?: string
+      }
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
       if (!Array.isArray(data.rows)) throw new Error('生成结果无效：模型没有返回像素网格。')
       const spend = engine.shop.spendCoins(GENERATE_COST, 'pet_generation')
@@ -338,10 +332,15 @@ export const ChatPet: FC = () => {
         engine.shop.earnCoins(GENERATE_COST, 'pet_generation_refund')
         return { ok: false, error: '保存失败：浏览器本地存储不可用。' }
       }
-      // the model's one-line personality becomes the persona seed, so the
-      // newborn already talks like the description asked for
-      if (pet.tagline.length > 0) {
-        const seed: PetProfile = { persona: pet.tagline, lines: {} }
+      // the newborn arrives fully voiced: the model returns a persona
+      // plus event lines for every pool key, and parseProfile sanitizes
+      // whatever shape it actually came in (missing keys just fall back
+      // to the defaults). tagline seeds the persona when absent.
+      const seed: PetProfile = parseProfile({
+        persona: (data.persona ?? '').trim() || pet.tagline,
+        lines: data.lines,
+      })
+      if (seed.persona.length > 0 || Object.keys(seed.lines).length > 0) {
         saveProfile(pet.id, seed)
         setProfiles(prev => ({ ...prev, [pet.id]: seed }))
       }
@@ -351,7 +350,7 @@ export const ChatPet: FC = () => {
       // the petId change tears down and remounts the physics effect,
       // whose cleanup removes any live bubble — speak only after the new
       // effect is up, or the greeting vanishes in the same frame
-      setTimeout(() => { sayRef.current(`我是 ${pet.name}！`) }, 350)
+      setTimeout(() => { speakPool('intro') }, 350)
       return { ok: true, name: pet.name }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
@@ -403,7 +402,7 @@ export const ChatPet: FC = () => {
         const fresh = Array.isArray(data.memories) ? data.memories : []
         if (fresh.length > 0) {
           setMemories(addMemories(fresh, workspaceRef.current.currentTitle))
-          sayRef.current('刚才的事,我记住啦。')
+          speakPool('memory')
         }
       } catch { /* background witnessing: never surface errors */ }
       finally { memoryInFlightRef.current = false }
@@ -488,14 +487,12 @@ export const ChatPet: FC = () => {
     const art: Frames = activePet.frames
     // capture by value: the closures below (tick) must not re-check null
     const idleLines = activePet.idleLines
-    // event lines: profile pools override the built-in ones; custom idle
-    // lines join the built-in ambient chatter instead of replacing it.
-    // read through a ref so care-panel edits apply live without restarting
-    // the physics loop (which would teleport the pet back to spawn)
-    const line = (key: 'work' | 'done' | 'low'): string =>
-      pick(profileRef.current.lines[key] ?? CHAT_LINES[key])
+    // event lines: profile pools override the defaults; custom idle lines
+    // join the built-in ambient chatter instead of replacing it. read
+    // through a ref so care-panel edits apply live without restarting the
+    // physics loop (which would teleport the pet back to spawn)
     const ambientIdle = (): readonly string[] =>
-      [...CHAT_LINES.idle, ...idleLines, ...(profileRef.current.lines.idle ?? [])]
+      [...DEFAULT_LINES.idle, ...idleLines, ...(profileRef.current.lines.idle ?? [])]
     injectStyles()
     const layer = layerRef.current
     const unit = unitRef.current
@@ -527,14 +524,14 @@ export const ChatPet: FC = () => {
       }
       lastUserCount = users.length
       const streaming = !!document.querySelector('[data-streaming]')
-      if (!wasStreaming && streaming && users.length > 0) say(line('work'))
+      if (!wasStreaming && streaming && users.length > 0) say(speakLine(profileRef.current, 'work'))
       if (wasStreaming && !streaming) {
         const nodes = document.querySelectorAll('[data-chat-flow-key]')
         const lastNode = nodes[nodes.length - 1]
         const outLen = lastNode?.textContent?.length ?? 0
         engine.onAssistantDone(outLen)
         recordTask(outLen)
-        if (users.length > 0) say(line('done'))
+        if (users.length > 0) say(speakLine(profileRef.current, 'done'))
         // memory extraction paces off completed tasks: every Nth one
         // (daily-capped) quietly rereads the visible conversation
         if (bumpTaskCounter()) maybeExtractMemory()
@@ -665,7 +662,7 @@ export const ChatPet: FC = () => {
       if (on) {
         if (ctlHint) ctlHint.textContent = '操控中：A/D 移动 · 空格 跳跃 · W 攀爬 · S 下落'
         showCtlHint()
-        if (Math.random() < .6) say(pick(CHAT_LINES.ctl))
+        if (Math.random() < .6) say(speakLine(profileRef.current, 'ctl'))
       } else {
         clearTimeout(ctlFadeTimer)
         if (ctlHint) ctlHint.style.display = 'none'
@@ -719,8 +716,8 @@ export const ChatPet: FC = () => {
           else if (now > nextChatAt) {
             const s = engine.getStats()
             say(s.power < 30 || s.mood < 30
-              ? line('low')
-              : pick(ambientIdle()))
+              ? speakLine(profileRef.current, 'low')
+              : pickLine(ambientIdle()))
             nextChatAt = now + 24000 + Math.random() * 20000
           }
         }
@@ -840,7 +837,7 @@ export const ChatPet: FC = () => {
         dragMoved = true
         dragging = true
         unit.classList.add('dsh-pet-sprite-dragging')
-        if (Math.random() < .5) say(pick(CHAT_LINES.drag))
+        if (Math.random() < .5) say(speakLine(profileRef.current, 'drag'))
       }
       dragX = e.clientX
       dragY = e.clientY
@@ -966,6 +963,7 @@ export const ChatPet: FC = () => {
           onGeneratePet={handleGeneratePet}
           onImportPet={handleImportPet}
           onPetSay={(text) => sayRef.current(text, true)}
+          onSpeakPool={speakPool}
           onSwitchPet={openPicker}
           memories={memories}
           onRemoveMemory={(id) => { setMemories(removeMemory(id)) }}

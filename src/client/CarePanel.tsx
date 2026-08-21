@@ -6,7 +6,8 @@
 import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import type { MiniEngine } from './game/mini-engine.ts'
 import type { ChatModel } from './PetChatBox.tsx'
-import type { PetProfile } from './custom-pets.ts'
+import type { PetProfile, LineKey } from './custom-pets.ts'
+import { LINE_KEYS, LINE_META } from './custom-pets.ts'
 import {
   claimLogReward, claimWeekReward, getWitnessDay, getWitnessWeek, getWeekLog,
   recordCare, saveLogText, saveWeekLogText,
@@ -25,6 +26,7 @@ interface Props {
   onGeneratePet: (description: string) => Promise<{ ok: boolean; name?: string; error?: string }> // LLM sprite generation (spends coins)
   onImportPet: (text: string) => { ok: boolean; name?: string; error?: string } // share-file import (free)
   onPetSay: (text: string) => void // speak through the pet's bubble (wrapped)
+  onSpeakPool: (key: LineKey) => void // fire a pool-keyed speech event through the pet's bubble
   onSwitchPet: () => void // reopen the companion picker
   memories: PetMemory[] // the pet's stored memories about the user
   onRemoveMemory: (id: string) => void // drop one memory
@@ -131,7 +133,7 @@ function injectPanelStyles(): void {
   document.head.appendChild(s)
 }
 
-export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, onImportPet, onPetSay, onSwitchPet, memories, onRemoveMemory, autoMemory, onAutoMemoryChange, workspace, onClose }) => {
+export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, onImportPet, onPetSay, onSpeakPool, onSwitchPet, memories, onRemoveMemory, autoMemory, onAutoMemoryChange, workspace, onClose }) => {
   const [, bump] = useState(0)
   const [tab, setTab] = useState<'status' | 'bag' | 'shop' | 'set'>('status')
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
@@ -178,9 +180,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
   const refresh = useCallback(() => bump((v) => v + 1), [])
 
   // event-lines plumbing: text in the editor is one line per entry; empty
-  // pools fall back to the built-in voice. Interactions speak in the pet's
-  // own words when a pool exists, else keep the plain system wording.
-  type LineKey = keyof PetProfile['lines']
+  // pools fall back to the built-in voice (speakLine in custom-pets.ts).
   const linesText = (key: LineKey): string => profile.lines[key]?.join('\n') ?? ''
   const setLines = (key: LineKey, text: string): void => {
     const rows = text.split('\n').map(s => s.trim()).filter(s => s.length > 0).slice(0, 8)
@@ -188,10 +188,6 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
     if (rows.length > 0) next[key] = rows
     else delete next[key]
     onProfileChange({ lines: next })
-  }
-  const petLine = (key: LineKey, fallback: string): string => {
-    const pool = profile.lines[key]
-    return pool !== undefined && pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : fallback
   }
 
   // Position: open to the left of the pet, above its base; flip to the
@@ -224,7 +220,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
     const r = engine.care.play(id)
     if (r.ok) {
       recordCare('play')
-      say(petLine('play', id === 'hide_seek' ? '捉迷藏！心情 +10 电量 -18' : '晒了一会太阳，心情 +5'))
+      onSpeakPool('play')
     }
     else if (r.reason === 'too_low_power') say('电量不够玩了，先喂点东西吧')
     refresh()
@@ -233,7 +229,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
     const r = engine.care.rest({ duration: 30, wokeBy: 'manual' })
     if (r.ok) {
       recordCare('rest')
-      say(petLine('rest', `睡了 30 秒：心情 +${r.moodGain} 电量 -${r.powerCost}`))
+      onSpeakPool('rest')
     }
     refresh()
   }
@@ -244,8 +240,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
       return
     }
     recordCare('feed')
-    const def = engine.inventory.getItemDef(id)
-    say(petLine('feed', def?.useText ?? `用掉了 ${id}`))
+    onSpeakPool('feed')
     refresh()
   }
   const doBuy = (id: string) => {
@@ -569,22 +564,17 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                   <div className="dsh-pet-sprite-set-note">
                     每行一条，随机触发；留空用默认。最多 8 条，每条 24 字内。
                   </div>
-                  <label>待机闲聊</label>
-                  <textarea value={linesText('idle')} onChange={(e) => setLines('idle', e.target.value)} rows={2} placeholder={'云看起来像棉花糖。\n悄悄说：我在攒星币。'} />
-                  <label>开工（agent 开始干活）</label>
-                  <textarea value={linesText('work')} onChange={(e) => setLines('work', e.target.value)} rows={2} placeholder={'开工啦。\n让我盯着点……'} />
-                  <label>完成（agent 干完活）</label>
-                  <textarea value={linesText('done')} onChange={(e) => setLines('done', e.target.value)} rows={2} placeholder={'呼——完成啦。\n辛苦辛苦。'} />
-                  <label>状态差（饿 / 不开心）</label>
-                  <textarea value={linesText('low')} onChange={(e) => setLines('low', e.target.value)} rows={2} placeholder={'有点累了，想休息……\n能量快见底了……'} />
-                  <label>喂食后</label>
-                  <textarea value={linesText('feed')} onChange={(e) => setLines('feed', e.target.value)} rows={2} placeholder={'好吃！再来一口？'} />
-                  <label>玩耍后</label>
-                  <textarea value={linesText('play')} onChange={(e) => setLines('play', e.target.value)} rows={2} placeholder={'再来再来！'} />
-                  <label>休息后</label>
-                  <textarea value={linesText('rest')} onChange={(e) => setLines('rest', e.target.value)} rows={2} placeholder={'睡饱了～'} />
-                  <label>切换会话（主人换了工地）</label>
-                  <textarea value={linesText('switch')} onChange={(e) => setLines('switch', e.target.value)} rows={2} placeholder={'换个地方啦。\n这个工地我来过吗？'} />
+                  {LINE_KEYS.map(key => (
+                    <div key={key}>
+                      <label>{LINE_META[key].label}</label>
+                      <textarea
+                        value={linesText(key)}
+                        onChange={(e) => setLines(key, e.target.value)}
+                        rows={2}
+                        placeholder={LINE_META[key].ph}
+                      />
+                    </div>
+                  ))}
                 </div>
               )}
               <h4>自动记忆</h4>

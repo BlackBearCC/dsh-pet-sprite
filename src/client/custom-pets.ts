@@ -26,24 +26,93 @@ export interface PetProfile {
   /** Free-form personality fed to the chat system prompt. */
   persona: string
   /** Bubble lines per event; one per line in the editor, picked at random. */
-  lines: {
-    /** Ambient chatter while idling. */
-    idle?: string[]
-    /** When the agent starts streaming (the pet opens its laptop). */
-    work?: string[]
-    /** When the agent's turn completes. */
-    done?: string[]
-    /** When mood/power/health is in a bad state. */
-    low?: string[]
-    /** After being fed an item. */
-    feed?: string[]
-    /** After play interactions. */
-    play?: string[]
-    /** After resting. */
-    rest?: string[]
-    /** When the user switches to another DSH session. */
-    switch?: string[]
+  lines: Partial<Record<LineKey, string[]>>
+}
+
+/**
+ * Every speakable pet event, one registry. All bubble speech flows through
+ * here: a site fires `speak({ kind: 'pool', key })` (or a text event for
+ * content like chat replies), the picker reads the per-pet pool and falls
+ * back to DEFAULT_LINES. The /generate route asks the model to fill the
+ * same keys at birth, so a generated companion arrives fully voiced.
+ */
+export type LineKey =
+  | 'idle'    // ambient chatter while idling
+  | 'work'    // agent starts streaming (pet opens its laptop)
+  | 'done'    // agent's turn completes
+  | 'low'     // mood/power/health in a bad state
+  | 'feed'    // after being fed an item
+  | 'play'    // after play interactions
+  | 'rest'    // after resting
+  | 'switch'  // user switched to another DSH session
+  | 'memory'  // the pet memorized something new about the user
+  | 'think'   // side-chat request in flight
+  | 'error'   // side-chat request failed
+  | 'ctl'     // WASD takeover begins
+  | 'drag'    // being dragged around
+  | 'intro'   // first shown after birth / being picked ({name} substituted)
+
+/** Registry order = editor order. */
+export const LINE_KEYS: readonly LineKey[] = [
+  'idle', 'work', 'done', 'low', 'feed', 'play', 'rest', 'switch',
+  'memory', 'think', 'error', 'ctl', 'drag', 'intro',
+]
+
+/** Default pools (≤ 14 chars keeps the bubble compact). */
+export const DEFAULT_LINES: Readonly<Record<LineKey, readonly string[]>> = {
+  idle: [
+    '今天的代码顺利吗?', '站得有点久了……', '云看起来像棉花糖。',
+    '悄悄说:我在攒星币。', '要不要休息一下?', '这边风景不错。',
+  ],
+  work: ['开工啦。', '让我盯着点……', '在忙,勿扰。'],
+  done: ['呼——完成啦。', '又搞定一轮!', '辛苦辛苦。'],
+  low: ['有点累了,想休息……', '心情不太好,陪我玩玩?', '能量快见底了……'],
+  feed: ['好吃！', '谢谢投喂～', '再来一口？'],
+  play: ['再来再来！', '玩得好开心！', '哈哈，好痒～'],
+  rest: ['睡饱了～', '精神回来啦。', '小睡真舒服。'],
+  switch: ['换个地方啦。', '这个工地我来过吗?', '先熟悉一下环境。', '接着陪主人干活。'],
+  memory: ['刚才的事,我记住啦。', '记在小本本上了。', '这个值得记住。'],
+  think: ['让我想想……', '嗯……思考中。', '等我想想。'],
+  error: ['呜……卡住了。', '哎呀,出错了。', '脑子打结了……'],
+  ctl: ['交给我!', '看我的!', '出发!'],
+  drag: ['放我下来!', '抓稳了……', '飞起来咯!'],
+  intro: ['我是{name}！', '{name}来啦！', '你好呀,我是{name}。'],
+}
+
+/** Editor metadata: label shown above each textarea plus placeholder examples. */
+export const LINE_META: Readonly<Record<LineKey, { label: string; ph: string }>> = {
+  idle: { label: '待机闲聊', ph: '云看起来像棉花糖。\n悄悄说：我在攒星币。' },
+  work: { label: '开工（agent 开始干活）', ph: '开工啦。\n让我盯着点……' },
+  done: { label: '完成（agent 干完活）', ph: '呼——完成啦。\n辛苦辛苦。' },
+  low: { label: '状态差（饿 / 不开心）', ph: '有点累了，想休息……\n能量快见底了……' },
+  feed: { label: '喂食后', ph: '好吃！再来一口？' },
+  play: { label: '玩耍后', ph: '再来再来！' },
+  rest: { label: '休息后', ph: '睡饱了～' },
+  switch: { label: '切换会话（主人换了工地）', ph: '换个地方啦。\n这个工地我来过吗？' },
+  memory: { label: '记住新事（记下关于主人的记忆）', ph: '刚才的事，我记住啦。\n这个值得记住。' },
+  think: { label: '思考中（等待模型回复）', ph: '让我想想……' },
+  error: { label: '出错（聊天失败）', ph: '呜……卡住了。' },
+  ctl: { label: '接管操控（WASD 上手）', ph: '交给我！' },
+  drag: { label: '被拖拽', ph: '放我下来！' },
+  intro: { label: '初次见面（可用 {name} 代指自己）', ph: '我是{name}！\n{name}报到！' },
+}
+
+/** Pick one line from a pool at random. */
+export function pickLine(pool: readonly string[]): string {
+  return pool[Math.floor(Math.random() * pool.length)]
+}
+
+/**
+ * Resolve one event's speech: the pet's own pool wins, defaults back it
+ * up. `vars` substitutes `{name}`-style placeholders in the chosen line.
+ */
+export function speakLine(profile: Readonly<PetProfile>, key: LineKey, vars?: Record<string, string>): string {
+  const own = profile.lines[key]
+  let text = own !== undefined && own.length > 0 ? pickLine(own) : pickLine(DEFAULT_LINES[key])
+  if (vars !== undefined) {
+    for (const [k, v] of Object.entries(vars)) text = text.replaceAll(`{${k}}`, v)
   }
+  return text
 }
 
 /** A profile with nothing customized — everything falls back to defaults. */
@@ -71,7 +140,7 @@ export function parseProfile(v: unknown): PetProfile {
   const raw = v as { persona?: unknown; lines?: Record<string, unknown> }
   if (typeof raw.persona === 'string') p.persona = raw.persona.trim().slice(0, 500)
   if (raw.lines !== null && typeof raw.lines === 'object' && !Array.isArray(raw.lines)) {
-    for (const key of ['idle', 'work', 'done', 'low', 'feed', 'play', 'rest', 'switch'] as const) {
+    for (const key of LINE_KEYS) {
       const cleaned = cleanLines(raw.lines[key])
       if (cleaned !== undefined) p.lines[key] = cleaned
     }
