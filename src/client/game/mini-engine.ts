@@ -12,6 +12,7 @@ import { CareSystem } from './care-system.ts'
 import { RewardEngine } from './reward-engine.ts'
 import { DEFAULT_ATTRIBUTES } from './presets.ts'
 import { createLocalStore } from './local-store.ts'
+import { schedulePush } from '../sync.ts'
 
 const TICK_MS = 10_000
 
@@ -94,6 +95,7 @@ export class MiniEngine {
     const last = localStorage.getItem('dshPetSpriteGame:lastLogin')
     if (last === today) return
     localStorage.setItem('dshPetSpriteGame:lastLogin', today)
+    schedulePush()
     const prev = last ? new Date(last) : null
     const days = prev ? Math.floor((Date.now() - prev.getTime()) / 86_400_000) : 999
     this.bus.emit('login:streak', { streak: 1, date: today })

@@ -28,9 +28,13 @@ function parseOr<T>(raw: string | null, fallback: T): T {
 }
 
 // every slice and its blob key; mirrors the storage map in README ("How it
-// works": game state + chat history persist in localStorage)
-const SLICES: Array<{ blob: string; ls: string }> = [
-  { blob: 'petId', ls: 'dshPetSpriteGame:petId' },                     // chosen companion
+// works": game state + chat history persist in localStorage).
+// `raw: true` slices hold a BARE string in localStorage (not JSON) — e.g.
+// petId is 'poka', not '"poka"'. Their sync value is the plain string, and
+// hydration writes it back verbatim; JSON slices round-trip through
+// JSON.parse/stringify. Mixing the two would corrupt petId on adoption.
+const SLICES: Array<{ blob: string; ls: string; raw?: boolean }> = [
+  { blob: 'petId', ls: 'dshPetSpriteGame:petId', raw: true },           // chosen companion (bare 'poka' / 'custom:x')
   { blob: 'teasersSeen', ls: 'dshPetSpriteGame:teasersSeen' },         // one-time onboarding flags
   { blob: 'chatHistory', ls: 'dshPetSpriteChat:history' },             // last 30 chat turns
   { blob: 'chatModel', ls: 'dshPetSpriteChat:model' },                 // provider+model choice
@@ -38,9 +42,9 @@ const SLICES: Array<{ blob: string; ls: string }> = [
   { blob: 'customPets', ls: 'dshPetSprite:customPets' },               // generated companions
   { blob: 'memories', ls: 'dshPetSpriteMemory:items' },                // pet's memories of the user
   { blob: 'memoriesDaily', ls: 'dshPetSpriteMemory:daily' },           // memory daily cap
-  { blob: 'memoriesCounter', ls: 'dshPetSpriteMemory:counter' },       // memory extraction counter
-  { blob: 'memoriesAuto', ls: 'dshPetSpriteMemory:auto' },             // auto-extraction toggle
-  { blob: 'lastLogin', ls: 'dshPetSpriteGame:lastLogin' },             // daily login coin grant
+  { blob: 'memoriesCounter', ls: 'dshPetSpriteMemory:counter', raw: true }, // bare number-as-string
+  { blob: 'memoriesAuto', ls: 'dshPetSpriteMemory:auto', raw: true },  // bare '1' / '0'
+  { blob: 'lastLogin', ls: 'dshPetSpriteGame:lastLogin', raw: true },  // bare 'YYYY-MM-DD'
   { blob: 'witnessDays', ls: 'dshPetSpriteWitness:days' },             // daily work journal
 ]
 
@@ -63,12 +67,23 @@ function registerAll(): void {
   if (registered) return
   registered = true
 
-  for (const { blob, ls } of SLICES) {
-    syncSlice({
-      key: blob,
-      get: () => parseOr<unknown>(lsGet(ls), null),
-      set: (v) => lsSet(ls, JSON.stringify(v)),
-    })
+  for (const { blob, ls, raw } of SLICES) {
+    if (raw === true) {
+      // bare-string slice: value IS the string; hydration writes it verbatim.
+      // 'null' is a poison marker from the old buggy serializer (it JSON-
+      // stringified a null adoption) — never push it, never adopt it.
+      syncSlice({
+        key: blob,
+        get: () => { const v = lsGet(ls); return v === null || v === 'null' ? undefined : v },
+        set: (v) => { if (typeof v === 'string' && v !== 'null') lsSet(ls, v) },
+      })
+    } else {
+      syncSlice({
+        key: blob,
+        get: () => parseOr<unknown>(lsGet(ls), null),
+        set: (v) => lsSet(ls, JSON.stringify(v)),
+      })
+    }
   }
 
   // game engine: expose each store key as its own nested slice

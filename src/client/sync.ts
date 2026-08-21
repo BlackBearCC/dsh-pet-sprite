@@ -128,7 +128,10 @@ export async function hydrateFromServer(): Promise<void> {
   writeSavedAt(serverAt)
   for (const s of slices) {
     const v = getPath(blob, s.key)
-    if (v !== undefined) {
+    // null values are a corrupt/empty marker from a buggy client (a real
+    // empty slice is absent, not null) — adopting them would wipe local
+    // progress on otherwise-fresh devices
+    if (v !== undefined && v !== null) {
       try { s.set(v) } catch { /* one bad slice must not break the rest */ }
     }
   }
