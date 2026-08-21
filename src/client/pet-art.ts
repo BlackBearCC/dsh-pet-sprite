@@ -240,35 +240,38 @@ export const PET_ART: Record<PetId, Frames> = { poka: POKA, mikan: CAT, puff: WH
 
 // ── The egg: pre-hatch state. Sits quietly in the corner (never blocks
 // the chat), wobbles now and then, and clicking it opens the companion
-// picker. A short diagonal crack + two speckles hint at something alive
-// inside. Single frame — the wobble is a CSS animation.
+// picker. A plump 18x23 silhouette (matching the pets' footprint) with a
+// white shine patch upper-left, gray-blue speckles and right-side shade
+// for volume, a light-blue base tint, and one red crack low-center hint-
+// ing at something alive inside. Single frame — wobble + gleam + glow
+// are CSS animations on the container.
 export const EGG_ROWS: string[] = [
   '........................',
   '........................',
   '........................',
-  '........................',
-  '..........oooo..........',
-  '........oohhhhoo........',
-  '.......oohhhhhhoo.......',
-  '......oohhhhhhhhoo......',
-  '......oohhzzhhhhoo......',
-  '.....oohhhhhhhhhhoo.....',
-  '.....oohhhoohhhhhoo.....',
-  '.....oohhhhhhhohhoo.....',
-  '.....oohhhhhhzhhhoo.....',
-  '.....oohhhhhhhhhhoo.....',
-  '.....oohhhhhhhhhhoo.....',
-  '.....oohhhhhhhhhhoo.....',
-  '.....oohhhhhhhhhhoo.....',
-  '.....oohhhhhhhhhhoo.....',
-  '.....oohhhhhhhhhhoo.....',
-  '......oohhhhhhhhoo......',
-  '......oohhhhhhhhoo......',
-  '.......oohhhhhhoo.......',
-  '........oohhhhoo........',
-  '..........oooo..........',
-  '........................',
-  '........................',
+  '.........oooooo.........',
+  '.......occcccccco.......',
+  '......occwwcccczco......',
+  '.....occwwwwcccczco.....',
+  '....occcwwwwcccczzco....',
+  '...occccwwwwczccczco....',
+  '...occcccwwczcccczco....',
+  '..occccccccccccccczco...',
+  '..occcccczcccccczczzco..',
+  '..occcccccccczccccczzo..',
+  '..occcccccccccczccczzo..',
+  '..occczcccccccccccczzo..',
+  '..occcczcccccccccczczo..',
+  '..occccccccczccccczzzo..',
+  '..occcccccccccczcccczzo.',
+  '..occcccccccccTcccczco..',
+  '...occcccccccccccczzo...',
+  '...occcccccccccccczzo...',
+  '....oggggggggggggzzo....',
+  '.....oggggggggggzzo.....',
+  '......oggggggggzzo......',
+  '.......oggggggzzo.......',
+  '.........oooooo.........',
   '........................',
   '........................',
 ]
