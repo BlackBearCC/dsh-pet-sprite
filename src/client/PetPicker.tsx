@@ -6,7 +6,8 @@
 
 import { useEffect, useRef, useState, type FC } from 'react'
 import { drawPet, PET_ART, PET_IDS, PET_META, type Frames } from './pet-art.ts'
-import { framesFromRows, type CustomPet } from './custom-pets.ts'
+import { downloadShareFile, framesFromRows, type CustomPet } from './custom-pets.ts'
+import { isCustomPetId } from '../pixel-format.ts'
 
 interface Props {
   /** Currently active companion id (badge in the corner), null on first launch. */
@@ -49,12 +50,22 @@ function injectPickerStyles(): void {
 .dsh-pet-sprite-picker-card.cur::before{content:'当前';position:absolute;top:-11px;right:10px;font-size:10px;font-weight:800;color:#4a4553;background:#ffd33d;border:2px solid #4a4553;border-radius:999px;padding:1px 8px;box-shadow:0 2px 0 rgba(0,0,0,.15)}
 .dsh-pet-sprite-picker-card.picked{transform:scale(1.07) rotate(0deg);background:#fffbe8;box-shadow:0 8px 0 rgba(0,0,0,.2)}
 .dsh-pet-sprite-picker-card.dim{opacity:.45;transform:scale(.96)}
+.dsh-pet-sprite-picker-share{position:absolute;bottom:8px;right:8px;font-size:10px;font-weight:800;color:#4a4553;background:#ffd33d;border:2px solid #4a4553;border-radius:999px;padding:1px 8px;box-shadow:0 2px 0 rgba(0,0,0,.15);cursor:pointer;user-select:none}
+.dsh-pet-sprite-picker-share:hover{background:#ffe27a;transform:scale(1.08)}
+.dsh-pet-sprite-picker-share:active{transform:scale(.92)}
+.dsh-pet-sprite-picker-card .tg{padding-bottom:18px}
 @media (prefers-reduced-motion:reduce){.dsh-pet-sprite-picker-panel{animation-duration:.01s}.dsh-pet-sprite-picker-card{transition:none}}
 `
   document.head.appendChild(s)
 }
 
-const PetCard: FC<{ pet: PickerPet; isCurrent: boolean; state: 'idle' | 'picked' | 'dim'; onPick: () => void }> = ({ pet, isCurrent, state, onPick }) => {
+const PetCard: FC<{
+  pet: PickerPet
+  custom?: CustomPet // present on generated pets — enables the share button
+  isCurrent: boolean
+  state: 'idle' | 'picked' | 'dim'
+  onPick: () => void
+}> = ({ pet, custom, isCurrent, state, onPick }) => {
   const ref = useRef<HTMLCanvasElement>(null)
   const [blinking, setBlinking] = useState(false)
   useEffect(() => {
@@ -84,6 +95,25 @@ const PetCard: FC<{ pet: PickerPet; isCurrent: boolean; state: 'idle' | 'picked'
       <canvas ref={ref} width={96} height={112} aria-hidden="true" />
       <span className="nm">{pet.name}</span>
       <span className="tg">{pet.tagline}</span>
+      {custom !== undefined && (
+        <span
+          role="button"
+          tabIndex={0}
+          className="dsh-pet-sprite-picker-share"
+          title="导出分享文件"
+          // nested interactive element inside a <button> is invalid HTML and
+          // would also pick the pet — stop the chain and download instead
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); downloadShareFile(custom) }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.stopPropagation()
+              downloadShareFile(custom)
+            }
+          }}
+        >
+          分享
+        </span>
+      )}
     </button>
   )
 }
@@ -130,6 +160,7 @@ export const PetPicker: FC<Props> = ({ currentId, customPets, onPick, onClose })
             <PetCard
               key={pet.id}
               pet={pet}
+              custom={isCustomPetId(pet.id) ? customPets.find(c => c.id === pet.id) : undefined}
               isCurrent={currentId === pet.id}
               state={picked === null ? 'idle' : picked === pet.id ? 'picked' : 'dim'}
               onPick={() => handlePick(pet.id)}

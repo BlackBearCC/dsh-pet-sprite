@@ -3,7 +3,7 @@
 // status+interactions / inventory / shop / settings. Fixed light palette so
 // it reads the same under any DSH theme.
 
-import { useCallback, useEffect, useState, type FC } from 'react'
+import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import type { MiniEngine } from './game/mini-engine.ts'
 import type { ChatModel } from './PetChatBox.tsx'
 
@@ -16,6 +16,7 @@ interface Props {
   persona: string // user-authored personality for the companion's chat voice
   onPersonaChange: (persona: string) => void // persist an edit
   onGeneratePet: (description: string) => Promise<{ ok: boolean; name?: string; error?: string }> // LLM sprite generation (spends coins)
+  onImportPet: (text: string) => { ok: boolean; name?: string; error?: string } // share-file import (free)
   onSwitchPet: () => void // reopen the companion picker
   onClose: () => void
 }
@@ -93,6 +94,10 @@ function injectPanelStyles(): void {
 .dsh-pet-sprite-set textarea:focus,.dsh-pet-sprite-set input:focus{background:#fffbe8}
 .dsh-pet-sprite-set input{display:block;width:100%;box-sizing:border-box;border:1.5px solid #2a2f3e;border-radius:8px;padding:6px 8px;font:600 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#1f2430;background:#fff;outline:none;margin-bottom:6px}
 .dsh-pet-sprite-gen-btn{display:block;width:100%;margin-top:2px}
+.dsh-pet-sprite-import-file{display:none}
+.dsh-pet-sprite-import-row{display:flex;gap:6px}
+.dsh-pet-sprite-import-row .dsh-pet-sprite-btn{flex:1}
+.dsh-pet-sprite-paste-box{margin-bottom:6px}
 .dsh-pet-sprite-set-err{border:1.5px solid #e8434e;border-radius:8px;background:#ffe9ec;color:#b32832;font-size:10.5px;font-weight:700;padding:6px 9px;margin:6px 0;line-height:1.5;word-break:break-word}
 .dsh-pet-sprite-toast{position:fixed;z-index:960;background:#1f2430;color:#fff;font-size:12px;padding:7px 13px;border-radius:9px;box-shadow:0 4px 0 rgba(0,0,0,.2);animation:dshPetSpriteToast 2.6s ease forwards;max-width:260px}
 @keyframes dshPetSpriteToast{from{opacity:0;transform:translateY(8px)}10%,80%{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-6px)}}
@@ -100,7 +105,7 @@ function injectPanelStyles(): void {
   document.head.appendChild(s)
 }
 
-export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, persona, onPersonaChange, onGeneratePet, onSwitchPet, onClose }) => {
+export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, persona, onPersonaChange, onGeneratePet, onImportPet, onSwitchPet, onClose }) => {
   const [, bump] = useState(0)
   const [tab, setTab] = useState<'status' | 'bag' | 'shop' | 'set'>('status')
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
@@ -112,6 +117,11 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
   const [genDesc, setGenDesc] = useState('')
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
+  // share-file import: hidden file input + paste-box toggle + error state
+  const importInputRef = useRef<HTMLInputElement>(null)
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasteText, setPasteText] = useState('')
+  const [importError, setImportError] = useState<string | null>(null)
   useEffect(() => { injectPanelStyles() }, [])
 
   const loadModels = useCallback(async () => {
@@ -202,6 +212,25 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
       setGenError(r.error ?? '生成失败，再试一次。')
     }
     refresh()
+  }
+
+  // share-file import: shared result object for the file picker and the
+  // paste box; on success the picker overlay will re-render with the new pet
+  const doImport = (text: string): void => {
+    const r = onImportPet(text)
+    if (r.ok) {
+      setImportError(null)
+      setPasteOpen(false)
+      setPasteText('')
+      say(`「${r.name ?? ''}」加入了！已切换为它。`)
+    } else {
+      setImportError(r.error ?? '导入失败。')
+    }
+    refresh()
+  }
+  const doImportFile = (file: File | undefined): void => {
+    if (file === undefined) return
+    void file.text().then(doImport, () => setImportError('读不出这个文件。'))
   }
 
   return (
@@ -358,6 +387,49 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                 {generating ? '绘制中……' : '生成新伙伴（🪙100）'}
               </button>
               {genError !== null && <div className="dsh-pet-sprite-set-err">{genError}</div>}
+              <h4>导入伙伴</h4>
+              <div className="dsh-pet-sprite-set-note">
+                朋友分享的 <b>.dsh-pet.json</b> 文件可以直接导入，免费加入形象列表。
+              </div>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="dsh-pet-sprite-import-file"
+                onChange={(e) => {
+                  doImportFile(e.target.files?.[0])
+                  // allow re-picking the same file after fixing it elsewhere
+                  e.target.value = ''
+                }}
+              />
+              <div className="dsh-pet-sprite-import-row">
+                <button className="dsh-pet-sprite-btn" onClick={() => importInputRef.current?.click()}>选择文件</button>
+                <button
+                  className="dsh-pet-sprite-btn"
+                  onClick={() => { setPasteOpen(v => !v); setImportError(null) }}
+                >
+                  {pasteOpen ? '收起粘贴框' : '粘贴 JSON'}
+                </button>
+              </div>
+              {pasteOpen && (
+                <>
+                  <textarea
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.target.value)}
+                    placeholder='粘贴分享文件的内容（以 {"format":"dsh-pet-sprite" 开头）'
+                    rows={3}
+                    className="dsh-pet-sprite-paste-box"
+                  />
+                  <button
+                    className="dsh-pet-sprite-btn dsh-pet-sprite-gen-btn"
+                    onClick={() => doImport(pasteText)}
+                    disabled={pasteText.trim().length === 0}
+                  >
+                    导入
+                  </button>
+                </>
+              )}
+              {importError !== null && <div className="dsh-pet-sprite-set-err">{importError}</div>}
               <h4>形象</h4>
               <button className="dsh-pet-sprite-btn dsh-pet-sprite-switch" onClick={onSwitchPet}>更换形象</button>
             </div>

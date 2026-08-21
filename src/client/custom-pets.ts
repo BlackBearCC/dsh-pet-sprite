@@ -3,7 +3,7 @@
 // 24x28 grid; the engine animates a full frame set, so framesFromRows()
 // derives bob / blink / sleep / walk / jump variants from that single grid.
 
-import { GRID_H, GRID_W, isCustomPetId } from '../pixel-format.ts'
+import { fixGrid, GRID_H, GRID_W, isCustomPetId } from '../pixel-format.ts'
 import type { Frames } from './pet-art.ts'
 
 export interface CustomPet {
@@ -44,6 +44,86 @@ export function saveCustomPet(pet: CustomPet): boolean {
     return true
   } catch {
     return false
+  }
+}
+
+// ─── share format: export / import ──────────────────────────────────────────
+//
+// A share file is the sprite payload only — no id, no createdAt: importing
+// mints a fresh id, so a shared pet is a copy, not a reference. Grid rows
+// go through the same fixGrid() the node route applies to LLM output, so
+// hand-edited or truncated files degrade the same way generation does.
+
+/** Shared-sprite payload (what a .dsh-pet.json file contains). */
+export interface SharePetFile {
+  format: 'dsh-pet-sprite'
+  version: 1
+  name: string
+  tagline: string
+  rows: string[]
+}
+
+const SHARE_HEADER = 'dsh-pet-sprite'
+const NAME_MAX = 12
+const TAGLINE_MAX = 24
+
+export function toShareFile(pet: CustomPet): SharePetFile {
+  return {
+    format: SHARE_HEADER,
+    version: 1,
+    name: pet.name,
+    tagline: pet.tagline,
+    rows: pet.rows,
+  }
+}
+
+/** Trigger a .dsh-pet.json download for one custom pet. */
+export function downloadShareFile(pet: CustomPet): void {
+  const blob = new Blob([JSON.stringify(toShareFile(pet), null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  // filesystem-safe: keep CJK, drop path separators and friends
+  const safe = pet.name.replace(/[\\/:*?"<>|]/g, '').trim()
+  a.download = `${safe.length > 0 ? safe : 'pet'}.dsh-pet.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * Parse + validate a share file (from file picker or pasted text) and mint
+ * a fresh CustomPet. Same contract as generate: errors are strings for the
+ * UI, never thrown.
+ */
+export function importFromText(text: string): { pet: CustomPet } | { error: string } {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return { error: '不是有效的 JSON 文件。' }
+  }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { error: '格式不对：需要 dsh-pet-sprite 分享文件。' }
+  }
+  const v = raw as Partial<SharePetFile>
+  if (v.format !== SHARE_HEADER) {
+    return { error: '格式不对：缺少 dsh-pet-sprite 标识（请用「导出」生成的文件）。' }
+  }
+  const name = typeof v.name === 'string' ? v.name.trim().slice(0, NAME_MAX) : ''
+  if (name.length === 0) return { error: '名字缺失或为空。' }
+  const tagline = typeof v.tagline === 'string' ? v.tagline.trim().slice(0, TAGLINE_MAX) : ''
+  const grid = fixGrid(v.rows)
+  if ('error' in grid) {
+    return { error: `像素网格无效：${grid.error}` }
+  }
+  return {
+    pet: {
+      id: `custom:${Date.now().toString(36)}`,
+      name,
+      tagline,
+      rows: grid.rows,
+      createdAt: Date.now(),
+    },
   }
 }
 

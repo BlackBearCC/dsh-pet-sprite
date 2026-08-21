@@ -3,7 +3,7 @@ import { MiniEngine } from './game/mini-engine.ts'
 import { CarePanel } from './CarePanel.tsx'
 import { PetChatBox, type ChatModel, type ChatTurn } from './PetChatBox.tsx'
 import { PetPicker } from './PetPicker.tsx'
-import { framesFromRows, loadCustomPets, saveCustomPet, type CustomPet } from './custom-pets.ts'
+import { framesFromRows, importFromText, loadCustomPets, saveCustomPet, type CustomPet } from './custom-pets.ts'
 import { drawPet, EGG_ROWS, PET_ART, PET_IDS, PET_META, type Frames, type PetId } from './pet-art.ts'
 import { isCustomPetId } from '../pixel-format.ts'
 
@@ -305,6 +305,19 @@ export const ChatPet: FC = () => {
   const handlePersonaChange = (value: string): void => {
     setPersona(value)
     try { localStorage.setItem(PERSONA_KEY, value) } catch { /* ignore */ }
+  }
+
+  // share-file import: validation happens in custom-pets (same fixGrid the
+  // node route uses); here we only persist, refresh the picker list, and
+  // switch to the newcomer — free of charge, unlike generation.
+  const handleImportPet = (text: string): { ok: boolean; name?: string; error?: string } => {
+    const r = importFromText(text)
+    if ('error' in r) return { ok: false, error: r.error }
+    if (!saveCustomPet(r.pet)) return { ok: false, error: '保存失败：浏览器本地存储不可用。' }
+    setCustomPets(loadCustomPets())
+    savePetId(r.pet.id)
+    setPetId(r.pet.id)
+    return { ok: true, name: r.pet.name }
   }
 
   // pre-hatch egg sprite: redraw on every remount (the egg unmounts
@@ -818,6 +831,7 @@ export const ChatPet: FC = () => {
           persona={persona}
           onPersonaChange={handlePersonaChange}
           onGeneratePet={handleGeneratePet}
+          onImportPet={handleImportPet}
           onSwitchPet={openPicker}
           onChatModelChange={m => { setChatModel(m); saveChatModel(m) }}
           onClose={() => setPanelOpen(false)}

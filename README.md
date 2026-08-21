@@ -7,6 +7,7 @@ Not a wallpaper mascot — the pet lives in your chat area, **platform-jumps ove
 ## Features
 
 - **Three companions, one egg** — on first launch a speckled egg wobbles quietly in the corner (never a forced popup). Click it to hatch and pick your companion: **Poka** the white-haired girl, **Mikan** the tabby cat, or **Puff** the DeepSeek-blue baby whale. Switch anytime from the care panel.
+- **Generate & share your own companion** — describe it in one sentence ("a green dino with round glasses") and the model draws a new pixel sprite for 100 star coins, animated automatically. Every generated pet exports as a `.dsh-pet.json` file friends can import for free.
 - **Left-click to chat** — clicking the pet opens a small chat box beside it. Replies come from the model you already configured in DSH (provider + model pickable in the care panel's settings tab), so it reuses your existing credentials — no extra API key. The pet answers in-character as a speech bubble; the last 30 turns persist locally.
 - **Platform jumping playground** — the pet treats chat message bubbles as platforms: it wanders, climbs bubble edges, hops between messages on its own.
 - **Player control** — click empty space in the chat area to take over: `A/D` move, `Space` jump (double-tap mid-air for a skill jump), `W` climb, `S` drop through platforms. Idle 10s and it goes back to autonomous mode.
