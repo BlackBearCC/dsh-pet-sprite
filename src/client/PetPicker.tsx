@@ -19,6 +19,14 @@ interface Props {
   onPick: (id: string) => void
   /** Dismiss without choosing (overlay click / × button). */
   onClose: () => void
+  /**
+   * LLM sprite generation (runs in ChatPet: wallet + storage live there).
+   * Present only when a chat model is already picked — otherwise the care
+   * panel's settings tab stays the only (guided) entry.
+   */
+  onGeneratePet?: (description: string) => Promise<{ ok: boolean; name?: string; error?: string }>
+  /** Whether this would be the user's first custom pet (free). */
+  firstGenerateFree?: boolean
 }
 
 /** One pickable card, builtin or custom — everything the card needs to draw. */
@@ -56,6 +64,17 @@ function injectPickerStyles(): void {
 .dsh-pet-sprite-picker-share:hover{background:#ffe27a;transform:scale(1.08)}
 .dsh-pet-sprite-picker-share:active{transform:scale(.92)}
 .dsh-pet-sprite-picker-card .tg{padding-bottom:18px}
+.dsh-pet-sprite-picker-gen{margin-top:18px;border-top:2px dashed #e3e0ea;padding-top:14px}
+.dsh-pet-sprite-picker-gen-open{display:block;width:100%;background:#fffbe8;border:2.5px solid #4a4553;border-radius:12px;padding:10px 12px;font:800 13px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:#4a4553;cursor:pointer;box-shadow:0 3px 0 rgba(0,0,0,.14);transition:transform .15s cubic-bezier(.2,1.5,.4,1)}
+.dsh-pet-sprite-picker-gen-open:hover{transform:translateY(-2px);background:#fff6cf}
+.dsh-pet-sprite-picker-gen-row{display:flex;gap:8px;align-items:stretch}
+.dsh-pet-sprite-picker-gen-row input{flex:1;min-width:0;border:2.5px solid #4a4553;border-radius:10px;padding:8px 10px;font:600 13px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#fff}
+.dsh-pet-sprite-picker-gen-row input:focus{outline:none;border-color:#4d6efa}
+.dsh-pet-sprite-picker-gen-go{border:2.5px solid #4a4553;border-radius:10px;background:#4d6efa;color:#fff;font:800 13px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;padding:8px 16px;cursor:pointer;box-shadow:0 3px 0 rgba(0,0,0,.15);white-space:nowrap}
+.dsh-pet-sprite-picker-gen-go:disabled{opacity:.5;cursor:default}
+.dsh-pet-sprite-picker-gen-x{border:none;background:none;color:#9a95a5;font:700 12px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;cursor:pointer;white-space:nowrap}
+.dsh-pet-sprite-picker-gen-err{color:#d64545;font:700 12px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;margin-top:7px}
+.dsh-pet-sprite-picker-gen-note{color:#9a95a5;font:600 11px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;margin-top:7px}
 @media (prefers-reduced-motion:reduce){.dsh-pet-sprite-picker-panel{animation-duration:.01s}.dsh-pet-sprite-picker-card{transition:none}}
 `
   document.head.appendChild(s)
@@ -121,9 +140,28 @@ const PetCard: FC<{
   )
 }
 
-export const PetPicker: FC<Props> = ({ currentId, customPets, profiles, onPick, onClose }) => {
+export const PetPicker: FC<Props> = ({ currentId, customPets, profiles, onPick, onClose, onGeneratePet, firstGenerateFree }) => {
   const [picked, setPicked] = useState<string | null>(null)
   useEffect(() => { injectPickerStyles() }, [])
+  const [genOpen, setGenOpen] = useState(false)
+  const [genDesc, setGenDesc] = useState('')
+  const [genBusy, setGenBusy] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
+  const doGenerate = async (): Promise<void> => {
+    const description = genDesc.trim()
+    if (description.length === 0 || genBusy || onGeneratePet === undefined) return
+    setGenBusy(true)
+    setGenError(null)
+    const r = await onGeneratePet(description)
+    setGenBusy(false)
+    if (r.ok) {
+      setGenDesc('')
+      // handleGeneratePet already switched to the newborn — just close
+      onClose()
+    } else {
+      setGenError(r.error ?? '生成失败，再试一次。')
+    }
+  }
 
   const pets: PickerPet[] = [
     ...PET_IDS.map(id => ({
@@ -171,6 +209,41 @@ export const PetPicker: FC<Props> = ({ currentId, customPets, profiles, onPick, 
             />
           ))}
         </div>
+        {onGeneratePet !== undefined && (
+          <div className="dsh-pet-sprite-picker-gen">
+            {!genOpen ? (
+              <button type="button" className="dsh-pet-sprite-picker-gen-open" onClick={() => setGenOpen(true)}>
+                ✨ 捏一只自己的{firstGenerateFree ? '（首次免费）' : '（100 星币）'}
+              </button>
+            ) : (
+              <>
+                <div className="dsh-pet-sprite-picker-gen-row">
+                  <input
+                    value={genDesc}
+                    onChange={(e) => setGenDesc(e.target.value)}
+                    placeholder="例如：戴圆眼镜的绿色小恐龙"
+                    maxLength={200}
+                    disabled={genBusy}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void doGenerate() }}
+                  />
+                  <button
+                    type="button"
+                    className="dsh-pet-sprite-picker-gen-go"
+                    onClick={() => { void doGenerate() }}
+                    disabled={genBusy || genDesc.trim().length === 0}
+                  >
+                    {genBusy ? '绘制中……' : '生成'}
+                  </button>
+                  {!genBusy && (
+                    <button type="button" className="dsh-pet-sprite-picker-gen-x" onClick={() => { setGenOpen(false); setGenError(null) }}>收起</button>
+                  )}
+                </div>
+                {genError !== null && <div className="dsh-pet-sprite-picker-gen-err">{genError}</div>}
+                <div className="dsh-pet-sprite-picker-gen-note">用一句话描述，模型画出像素形象并直接成为你的伙伴{firstGenerateFree ? '——第一只免费' : ''}。</div>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

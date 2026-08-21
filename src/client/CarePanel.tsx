@@ -25,6 +25,8 @@ interface Props {
   profile: PetProfile // active companion's persona + event lines
   onProfileChange: (patch: Partial<PetProfile>) => void // persist an edit
   onGeneratePet: (description: string) => Promise<{ ok: boolean; name?: string; error?: string }> // LLM sprite generation (spends coins)
+  /** How many custom companions exist (0 → first generate is free). */
+  customCount: number
   onImportPet: (text: string) => { ok: boolean; name?: string; error?: string } // share-file import (free)
   onPetSay: (text: string) => void // speak through the pet's bubble (wrapped)
   onSpeakPool: (key: LineKey) => void // fire a pool-keyed speech event through the pet's bubble
@@ -135,7 +137,7 @@ function injectPanelStyles(): void {
   document.head.appendChild(s)
 }
 
-export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, onImportPet, onPetSay, onSpeakPool, onBurst, onSwitchPet, memories, onRemoveMemory, autoMemory, onAutoMemoryChange, workspace, onClose }) => {
+export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, customCount, onImportPet, onPetSay, onSpeakPool, onBurst, onSwitchPet, memories, onRemoveMemory, autoMemory, onAutoMemoryChange, workspace, onClose }) => {
   const [, bump] = useState(0)
   const [tab, setTab] = useState<'status' | 'bag' | 'shop' | 'set'>('status')
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
@@ -608,7 +610,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                 onClick={() => { void doGenerate() }}
                 disabled={generating || genDesc.trim().length === 0}
               >
-                {generating ? '绘制中……' : <>生成新伙伴（<PixelIcon icon="coin" size={11} />100）</>}
+                {generating ? '绘制中……' : customCount === 0 ? '生成新伙伴（首只免费）' : <>生成新伙伴（<PixelIcon icon="coin" size={11} />100）</>}
               </button>
               {genError !== null && <div className="dsh-pet-sprite-set-err">{genError}</div>}
               <h4>导入伙伴</h4>

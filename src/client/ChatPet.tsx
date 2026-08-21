@@ -334,9 +334,13 @@ const ChatPetImpl: FC = () => {
     if (chatModel === null) {
       return { ok: false, error: '还没有选择模型：先在上方「聊天模型」里选一个。' }
     }
-    const GENERATE_COST = 100
+    // the first custom companion is free — the picker's egg-time entry
+    // would otherwise be a dead end for a brand-new user (login coins
+    // start at ~5-10, far below 100)
     const wallet = engine.shop.getWallet()
-    if (wallet.coins < GENERATE_COST) {
+    const firstFree = loadCustomPets().length === 0
+    const GENERATE_COST = firstFree ? 0 : 100
+    if (!firstFree && wallet.coins < GENERATE_COST) {
       return { ok: false, error: `星币不够：需要 ${GENERATE_COST}，当前只有 ${wallet.coins}。` }
     }
     generateInFlightRef.current = true
@@ -357,8 +361,10 @@ const ChatPetImpl: FC = () => {
       }
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
       if (!Array.isArray(data.rows)) throw new Error('生成结果无效：模型没有返回像素网格。')
-      const spend = engine.shop.spendCoins(GENERATE_COST, 'pet_generation')
-      if (!spend.ok) return { ok: false, error: '星币不够。' }
+      if (GENERATE_COST > 0) {
+        const spend = engine.shop.spendCoins(GENERATE_COST, 'pet_generation')
+        if (!spend.ok) return { ok: false, error: '星币不够。' }
+      }
       const pet: CustomPet = {
         id: `custom:${Date.now().toString(36)}`,
         name: (data.name ?? '').trim() || '小家伙',
@@ -367,7 +373,7 @@ const ChatPetImpl: FC = () => {
         createdAt: Date.now(),
       }
       if (!saveCustomPet(pet)) {
-        engine.shop.earnCoins(GENERATE_COST, 'pet_generation_refund')
+        if (GENERATE_COST > 0) engine.shop.earnCoins(GENERATE_COST, 'pet_generation_refund')
         return { ok: false, error: '保存失败：浏览器本地存储不可用。' }
       }
       // the newborn arrives fully voiced: the model returns a persona
@@ -1054,6 +1060,7 @@ const ChatPetImpl: FC = () => {
         <CarePanel
           engine={engine}
           anchor={anchor}
+          customCount={customPets.length}
           petName={activePet.name}
           chatModel={chatModel}
           profile={activeProfile}
@@ -1093,6 +1100,8 @@ const ChatPetImpl: FC = () => {
           profiles={profiles}
           onPick={handlePick}
           onClose={() => setPickerOpen(false)}
+          onGeneratePet={chatModel === null ? undefined : handleGeneratePet}
+          firstGenerateFree={customPets.length === 0}
         />
       )}
     </div>
