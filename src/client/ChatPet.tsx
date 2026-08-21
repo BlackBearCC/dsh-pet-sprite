@@ -3,7 +3,10 @@ import { MiniEngine } from './game/mini-engine.ts'
 import { CarePanel } from './CarePanel.tsx'
 import { PetChatBox, type ChatModel, type ChatTurn } from './PetChatBox.tsx'
 import { PetPicker } from './PetPicker.tsx'
-import { framesFromRows, importFromText, loadCustomPets, saveCustomPet, type CustomPet } from './custom-pets.ts'
+import {
+  EMPTY_PROFILE, framesFromRows, importFromText, loadCustomPets, loadProfiles,
+  saveCustomPet, saveProfile, type CustomPet, type PetProfile,
+} from './custom-pets.ts'
 import { drawPet, EGG_ROWS, PET_ART, PET_IDS, PET_META, type Frames, type PetId } from './pet-art.ts'
 import { isCustomPetId } from '../pixel-format.ts'
 
@@ -59,11 +62,7 @@ function saveChatModel(model: ChatModel | null): void {
   } catch { /* ignore */ }
 }
 
-// ── user-authored persona for the companion's chat voice ───────────────────
-const PERSONA_KEY = 'dshPetSpriteChat:persona'
-function loadPersona(): string {
-  try { return localStorage.getItem(PERSONA_KEY) ?? '' } catch { return '' }
-}
+// ── per-pet profiles: persona + event lines (storage in custom-pets.ts) ─────
 
 /** Everything the render loop and UI need for one companion, builtin or custom. */
 interface ResolvedPet {
@@ -172,11 +171,16 @@ export const ChatPet: FC = () => {
   const [chatBusy, setChatBusy] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
   const [chatModel, setChatModel] = useState<ChatModel | null>(() => loadChatModel())
-  const [persona, setPersona] = useState<string>(() => loadPersona())
+  const [profiles, setProfiles] = useState<Record<string, PetProfile>>(() => loadProfiles())
   const engine = getEngine()
 
   // builtin or custom; null when the saved custom pet vanished from storage
   const activePet = petId === null ? null : resolvePet(petId, customPets)
+  // the active companion's soul; empty profile = all-default voice
+  const activeProfile = (petId !== null ? profiles[petId] : undefined) ?? EMPTY_PROFILE
+  // live mirror for the physics effect's closures (see comment there)
+  const profileRef = useRef<PetProfile>(EMPTY_PROFILE as PetProfile)
+  profileRef.current = activeProfile
 
   const handlePick = (id: string): void => {
     savePetId(id)
@@ -222,7 +226,7 @@ export const ChatPet: FC = () => {
           provider: chatModel.provider,
           model: chatModel.model,
           lang: navigator.language,
-          persona,
+          persona: activeProfile.persona,
         }),
       })
       const data = await res.json().catch(() => ({})) as { reply?: string; error?: string }
@@ -287,6 +291,13 @@ export const ChatPet: FC = () => {
         engine.shop.earnCoins(GENERATE_COST, 'pet_generation_refund')
         return { ok: false, error: '保存失败：浏览器本地存储不可用。' }
       }
+      // the model's one-line personality becomes the persona seed, so the
+      // newborn already talks like the description asked for
+      if (pet.tagline.length > 0) {
+        const seed: PetProfile = { persona: pet.tagline, lines: {} }
+        saveProfile(pet.id, seed)
+        setProfiles(prev => ({ ...prev, [pet.id]: seed }))
+      }
       setCustomPets(loadCustomPets())
       savePetId(pet.id)
       setPetId(pet.id)
@@ -302,18 +313,27 @@ export const ChatPet: FC = () => {
     }
   }
 
-  const handlePersonaChange = (value: string): void => {
-    setPersona(value)
-    try { localStorage.setItem(PERSONA_KEY, value) } catch { /* ignore */ }
+  // profile edits come from the care panel: either a new persona text or a
+  // whole lines pool; persist per-pet and refresh state
+  const handleProfileChange = (patch: Partial<PetProfile>): void => {
+    if (petId === null) return
+    const next: PetProfile = {
+      persona: patch.persona !== undefined ? patch.persona : activeProfile.persona,
+      lines: patch.lines !== undefined ? patch.lines : activeProfile.lines,
+    }
+    saveProfile(petId, next)
+    setProfiles(prev => ({ ...prev, [petId]: next }))
   }
 
   // share-file import: validation happens in custom-pets (same fixGrid the
-  // node route uses); here we only persist, refresh the picker list, and
-  // switch to the newcomer — free of charge, unlike generation.
+  // node route uses); here we persist sprite + soul, refresh the picker
+  // list, and switch to the newcomer — free of charge, unlike generation.
   const handleImportPet = (text: string): { ok: boolean; name?: string; error?: string } => {
     const r = importFromText(text)
     if ('error' in r) return { ok: false, error: r.error }
     if (!saveCustomPet(r.pet)) return { ok: false, error: '保存失败：浏览器本地存储不可用。' }
+    saveProfile(r.pet.id, r.profile)
+    setProfiles(prev => ({ ...prev, [r.pet.id]: r.profile }))
     setCustomPets(loadCustomPets())
     savePetId(r.pet.id)
     setPetId(r.pet.id)
@@ -371,6 +391,14 @@ export const ChatPet: FC = () => {
     const art: Frames = activePet.frames
     // capture by value: the closures below (tick) must not re-check null
     const idleLines = activePet.idleLines
+    // event lines: profile pools override the built-in ones; custom idle
+    // lines join the built-in ambient chatter instead of replacing it.
+    // read through a ref so care-panel edits apply live without restarting
+    // the physics loop (which would teleport the pet back to spawn)
+    const line = (key: 'work' | 'done' | 'low'): string =>
+      pick(profileRef.current.lines[key] ?? CHAT_LINES[key])
+    const ambientIdle = (): readonly string[] =>
+      [...CHAT_LINES.idle, ...idleLines, ...(profileRef.current.lines.idle ?? [])]
     injectStyles()
     const layer = layerRef.current
     const unit = unitRef.current
@@ -399,12 +427,12 @@ export const ChatPet: FC = () => {
       }
       lastUserCount = users.length
       const streaming = !!document.querySelector('[data-streaming]')
-      if (!wasStreaming && streaming && users.length > 0) say(pick(CHAT_LINES.work))
+      if (!wasStreaming && streaming && users.length > 0) say(line('work'))
       if (wasStreaming && !streaming) {
         const nodes = document.querySelectorAll('[data-chat-flow-key]')
         const lastNode = nodes[nodes.length - 1]
         engine.onAssistantDone(lastNode?.textContent?.length ?? 0)
-        if (users.length > 0) say(pick(CHAT_LINES.done))
+        if (users.length > 0) say(line('done'))
       }
       wasStreaming = streaming
     }
@@ -586,8 +614,8 @@ export const ChatPet: FC = () => {
           else if (now > nextChatAt) {
             const s = engine.getStats()
             say(s.power < 30 || s.mood < 30
-              ? pick(CHAT_LINES.low)
-              : pick([...CHAT_LINES.idle, ...idleLines]))
+              ? line('low')
+              : pick(ambientIdle()))
             nextChatAt = now + 24000 + Math.random() * 20000
           }
         }
@@ -828,8 +856,8 @@ export const ChatPet: FC = () => {
           anchor={anchor}
           petName={activePet.name}
           chatModel={chatModel}
-          persona={persona}
-          onPersonaChange={handlePersonaChange}
+          profile={activeProfile}
+          onProfileChange={handleProfileChange}
           onGeneratePet={handleGeneratePet}
           onImportPet={handleImportPet}
           onSwitchPet={openPicker}
@@ -854,6 +882,7 @@ export const ChatPet: FC = () => {
         <PetPicker
           currentId={petId}
           customPets={customPets}
+          profiles={profiles}
           onPick={handlePick}
           onClose={() => setPickerOpen(false)}
         />

@@ -16,6 +16,103 @@ export interface CustomPet {
   createdAt: number
 }
 
+/**
+ * The soul half of a companion: how it speaks and reacts. Profiles are
+ * per-pet (builtin ones too) and travel inside share files, so an exported
+ * pet carries both its sprite and its personality. Empty arrays fall back
+ * to the built-in line pools.
+ */
+export interface PetProfile {
+  /** Free-form personality fed to the chat system prompt. */
+  persona: string
+  /** Bubble lines per event; one per line in the editor, picked at random. */
+  lines: {
+    /** Ambient chatter while idling. */
+    idle?: string[]
+    /** When the agent starts streaming (the pet opens its laptop). */
+    work?: string[]
+    /** When the agent's turn completes. */
+    done?: string[]
+    /** When mood/power/health is in a bad state. */
+    low?: string[]
+    /** After being fed an item. */
+    feed?: string[]
+    /** After play interactions. */
+    play?: string[]
+    /** After resting. */
+    rest?: string[]
+  }
+}
+
+/** A profile with nothing customized — everything falls back to defaults. */
+export const EMPTY_PROFILE: Readonly<PetProfile> = { persona: '', lines: {} }
+
+const PROFILE_KEY = 'dshPetSpriteChat:profiles'
+/** Legacy pre-profile key: one persona shared by every companion. */
+const LEGACY_PERSONA_KEY = 'dshPetSpriteChat:persona'
+
+/** Sanitize one lines pool: drop blanks, clamp count and length. */
+function cleanLines(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined
+  const cleaned = v
+    .filter((s): s is string => typeof s === 'string')
+    .map(s => s.trim().slice(0, 24))
+    .filter(s => s.length > 0)
+    .slice(0, 8)
+  return cleaned.length > 0 ? cleaned : undefined
+}
+
+/** Parse + clamp an unknown value into a PetProfile; never throws. */
+export function parseProfile(v: unknown): PetProfile {
+  const p: PetProfile = { persona: '', lines: {} }
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return p
+  const raw = v as { persona?: unknown; lines?: Record<string, unknown> }
+  if (typeof raw.persona === 'string') p.persona = raw.persona.trim().slice(0, 500)
+  if (raw.lines !== null && typeof raw.lines === 'object' && !Array.isArray(raw.lines)) {
+    for (const key of ['idle', 'work', 'done', 'low', 'feed', 'play', 'rest'] as const) {
+      const cleaned = cleanLines(raw.lines[key])
+      if (cleaned !== undefined) p.lines[key] = cleaned
+    }
+  }
+  return p
+}
+
+/** All per-pet profiles keyed by companion id (builtins included). */
+export function loadProfiles(): Record<string, PetProfile> {
+  try {
+    const v = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? '{}') as Record<string, unknown>
+    const out: Record<string, PetProfile> = {}
+    for (const [id, prof] of Object.entries(v ?? {})) {
+      out[id] = parseProfile(prof)
+    }
+    // one-time migration: the old global persona becomes the profile of
+    // whichever companion was active back then — that's the one it tuned
+    if (localStorage.getItem(`${PROFILE_KEY}:migrated`) === null && localStorage.getItem(LEGACY_PERSONA_KEY) !== null) {
+      const activeId = localStorage.getItem('dshPetSpriteGame:petId')
+      const legacy = (localStorage.getItem(LEGACY_PERSONA_KEY) ?? '').trim().slice(0, 500)
+      if (activeId !== null && legacy.length > 0) {
+        out[activeId] = { persona: legacy, lines: out[activeId]?.lines ?? {} }
+      }
+      localStorage.setItem(`${PROFILE_KEY}:migrated`, '1')
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+/** Persist one companion's profile; returns false when storage is unusable. */
+export function saveProfile(id: string, profile: PetProfile): boolean {
+  try {
+    const all = loadProfiles()
+    all[id] = profile
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(all))
+    return true
+  } catch {
+    return false
+  }
+}
+
 const KEY = 'dshPetSprite:customPets'
 
 export function loadCustomPets(): CustomPet[] {
@@ -57,29 +154,34 @@ export function saveCustomPet(pet: CustomPet): boolean {
 /** Shared-sprite payload (what a .dsh-pet.json file contains). */
 export interface SharePetFile {
   format: 'dsh-pet-sprite'
-  version: 1
+  version: 1 | 2
   name: string
   tagline: string
   rows: string[]
+  /** v2: the pet's soul — persona + event lines. Absent in v1 files. */
+  profile?: PetProfile
 }
 
 const SHARE_HEADER = 'dsh-pet-sprite'
 const NAME_MAX = 12
 const TAGLINE_MAX = 24
 
-export function toShareFile(pet: CustomPet): SharePetFile {
+export function toShareFile(pet: CustomPet, profile?: PetProfile): SharePetFile {
   return {
     format: SHARE_HEADER,
-    version: 1,
+    version: 2,
     name: pet.name,
     tagline: pet.tagline,
     rows: pet.rows,
+    profile: profile !== undefined && (profile.persona.length > 0 || Object.keys(profile.lines).length > 0)
+      ? profile
+      : undefined,
   }
 }
 
-/** Trigger a .dsh-pet.json download for one custom pet. */
-export function downloadShareFile(pet: CustomPet): void {
-  const blob = new Blob([JSON.stringify(toShareFile(pet), null, 2)], { type: 'application/json' })
+/** Trigger a .dsh-pet.json download for one custom pet (sprite + soul). */
+export function downloadShareFile(pet: CustomPet, profile?: PetProfile): void {
+  const blob = new Blob([JSON.stringify(toShareFile(pet, profile), null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -92,10 +194,11 @@ export function downloadShareFile(pet: CustomPet): void {
 
 /**
  * Parse + validate a share file (from file picker or pasted text) and mint
- * a fresh CustomPet. Same contract as generate: errors are strings for the
+ * a fresh CustomPet plus its soul profile. v1 files (no profile) come in
+ * with an empty one. Same contract as generate: errors are strings for the
  * UI, never thrown.
  */
-export function importFromText(text: string): { pet: CustomPet } | { error: string } {
+export function importFromText(text: string): { pet: CustomPet; profile: PetProfile } | { error: string } {
   let raw: unknown
   try {
     raw = JSON.parse(text)
@@ -124,6 +227,7 @@ export function importFromText(text: string): { pet: CustomPet } | { error: stri
       rows: grid.rows,
       createdAt: Date.now(),
     },
+    profile: v.profile === undefined ? { persona: '', lines: {} } : parseProfile(v.profile),
   }
 }
 

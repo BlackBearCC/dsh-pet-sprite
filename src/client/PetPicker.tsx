@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState, type FC } from 'react'
 import { drawPet, PET_ART, PET_IDS, PET_META, type Frames } from './pet-art.ts'
-import { downloadShareFile, framesFromRows, type CustomPet } from './custom-pets.ts'
+import { downloadShareFile, framesFromRows, type CustomPet, type PetProfile } from './custom-pets.ts'
 import { isCustomPetId } from '../pixel-format.ts'
 
 interface Props {
@@ -14,6 +14,8 @@ interface Props {
   currentId: string | null
   /** User-generated companions from localStorage. */
   customPets: CustomPet[]
+  /** Per-pet souls (persona + event lines), exported together with the sprite. */
+  profiles: Record<string, PetProfile>
   onPick: (id: string) => void
   /** Dismiss without choosing (overlay click / × button). */
   onClose: () => void
@@ -62,10 +64,11 @@ function injectPickerStyles(): void {
 const PetCard: FC<{
   pet: PickerPet
   custom?: CustomPet // present on generated pets — enables the share button
+  profile?: PetProfile // the custom pet's soul, rides along in the share file
   isCurrent: boolean
   state: 'idle' | 'picked' | 'dim'
   onPick: () => void
-}> = ({ pet, custom, isCurrent, state, onPick }) => {
+}> = ({ pet, custom, profile, isCurrent, state, onPick }) => {
   const ref = useRef<HTMLCanvasElement>(null)
   const [blinking, setBlinking] = useState(false)
   useEffect(() => {
@@ -103,11 +106,11 @@ const PetCard: FC<{
           title="导出分享文件"
           // nested interactive element inside a <button> is invalid HTML and
           // would also pick the pet — stop the chain and download instead
-          onClick={(e) => { e.stopPropagation(); e.preventDefault(); downloadShareFile(custom) }}
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); downloadShareFile(custom, profile) }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.stopPropagation()
-              downloadShareFile(custom)
+              downloadShareFile(custom, profile)
             }
           }}
         >
@@ -118,7 +121,7 @@ const PetCard: FC<{
   )
 }
 
-export const PetPicker: FC<Props> = ({ currentId, customPets, onPick, onClose }) => {
+export const PetPicker: FC<Props> = ({ currentId, customPets, profiles, onPick, onClose }) => {
   const [picked, setPicked] = useState<string | null>(null)
   useEffect(() => { injectPickerStyles() }, [])
 
@@ -161,6 +164,7 @@ export const PetPicker: FC<Props> = ({ currentId, customPets, onPick, onClose })
               key={pet.id}
               pet={pet}
               custom={isCustomPetId(pet.id) ? customPets.find(c => c.id === pet.id) : undefined}
+              profile={profiles[pet.id]}
               isCurrent={currentId === pet.id}
               state={picked === null ? 'idle' : picked === pet.id ? 'picked' : 'dim'}
               onPick={() => handlePick(pet.id)}
