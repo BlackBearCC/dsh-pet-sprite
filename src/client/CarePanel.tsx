@@ -27,6 +27,7 @@ interface Props {
   onImportPet: (text: string) => { ok: boolean; name?: string; error?: string } // share-file import (free)
   onPetSay: (text: string) => void // speak through the pet's bubble (wrapped)
   onSpeakPool: (key: LineKey) => void // fire a pool-keyed speech event through the pet's bubble
+  onBurst: (opts?: { count?: number; color?: string }) => void // fire a particle burst at the pet's position
   onSwitchPet: () => void // reopen the companion picker
   memories: PetMemory[] // the pet's stored memories about the user
   onRemoveMemory: (id: string) => void // drop one memory
@@ -133,7 +134,7 @@ function injectPanelStyles(): void {
   document.head.appendChild(s)
 }
 
-export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, onImportPet, onPetSay, onSpeakPool, onSwitchPet, memories, onRemoveMemory, autoMemory, onAutoMemoryChange, workspace, onClose }) => {
+export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, onImportPet, onPetSay, onSpeakPool, onBurst, onSwitchPet, memories, onRemoveMemory, autoMemory, onAutoMemoryChange, workspace, onClose }) => {
   const [, bump] = useState(0)
   const [tab, setTab] = useState<'status' | 'bag' | 'shop' | 'set'>('status')
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
@@ -221,6 +222,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
     if (r.ok) {
       recordCare('play')
       onSpeakPool('play')
+      onBurst({ count: 5, color: '#ffd33d' })
     }
     else if (r.reason === 'too_low_power') say('电量不够玩了，先喂点东西吧')
     refresh()
@@ -241,6 +243,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
     }
     recordCare('feed')
     onSpeakPool('feed')
+    onBurst({ count: 4, color: '#f2839b' })
     refresh()
   }
   const doBuy = (id: string) => {
@@ -297,6 +300,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
           scope,
           day,
           memories: memoryTexts(10),
+          petState: stats,
         }),
       })
       const data = await res.json().catch(() => ({})) as { log?: string; error?: string }

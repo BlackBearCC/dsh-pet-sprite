@@ -99,10 +99,13 @@ function getEngine(): MiniEngine {
 // The journal witnesses level-ups too. Wired once per page load, not per
 // effect run — the engine is a singleton and its bus outlives remounts.
 let witnessBusWired = false
-function wireWitnessBus(engine: MiniEngine): void {
+function wireWitnessBus(engine: MiniEngine, burstRef: React.MutableRefObject<(opts?: { count?: number; color?: string }) => void>): void {
   if (witnessBusWired) return
   witnessBusWired = true
-  engine.bus.on('level:up', () => recordLevelUp())
+  engine.bus.on('level:up', () => {
+    recordLevelUp()
+    burstRef.current({ count: 14, color: '#ffd33d' })
+  })
 }
 
 type PetMode = 'idle' | 'work'
@@ -158,6 +161,8 @@ export const ChatPet: FC = () => {
   // lets the component layer fire pet bubbles (the bubble lives in the
   // physics effect's closure)
   const sayRef = useRef<(text: string, wrap?: boolean) => void>(() => {})
+  // lets the component layer fire particle bursts at the pet's position
+  const burstRef = useRef<(opts?: { count?: number; color?: string }) => void>(() => {})
   // null until a companion is chosen: a quiet egg sits in the corner
   // instead — clicking it (never auto-popup) opens the picker
   const [petId, setPetId] = useState<string | null>(() => loadPetId())
@@ -177,7 +182,7 @@ export const ChatPet: FC = () => {
   const [memories, setMemories] = useState<PetMemory[]>(() => loadMemories())
   const [autoMemory, setAutoMemory] = useState<boolean>(() => autoExtractEnabled())
   const engine = getEngine()
-  wireWitnessBus(engine)
+  wireWitnessBus(engine, burstRef)
 
   // builtin or custom; null when the saved custom pet vanished from storage
   const activePet = petId === null ? null : resolvePet(petId, customPets)
@@ -265,6 +270,7 @@ export const ChatPet: FC = () => {
           persona: activeProfile.persona,
           workspace: { current: workspace.currentTitle, recent: workspace.recentTitles },
           memories: memoryTexts(10),
+          petState: engine.getStats(),
         }),
       })
       const data = await res.json().catch(() => ({})) as { reply?: string; error?: string }
@@ -531,7 +537,13 @@ export const ChatPet: FC = () => {
         const outLen = lastNode?.textContent?.length ?? 0
         engine.onAssistantDone(outLen)
         recordTask(outLen)
-        if (users.length > 0) say(speakLine(profileRef.current, 'done'))
+        if (users.length > 0) {
+          // agent error detection: if the last message contains error
+          // indicators, the pet reacts once — a natural empathy moment,
+          // not a proactive notification
+          const hasError = lastNode?.querySelector('[data-error], .error, [data-chat-flow-kind="error"]') !== null
+          say(speakLine(profileRef.current, hasError ? 'error' : 'done'))
+        }
         // memory extraction paces off completed tasks: every Nth one
         // (daily-capped) quietly rereads the visible conversation
         if (bumpTaskCounter()) maybeExtractMemory()
@@ -619,19 +631,23 @@ export const ChatPet: FC = () => {
       else if (r < .8) startClimb(c)
       else if (h > 0 && plat) goal = { x: Math.random() < .5 ? plat.x1 - 40 : plat.x2 + 8 }
     }
-    function burst(): void {
+    function burst(opts?: { count?: number; color?: string }): void {
       if (still) return
-      for (let i = 0; i < 6; i++) {
+      const count = opts?.count ?? 6
+      const color = opts?.color ?? '#ffd33d'
+      for (let i = 0; i < count; i++) {
         const s = document.createElement('span')
         s.className = 'dsh-pet-sprite-spark'
         s.style.left = `${18 + Math.random() * 16}px`
         s.style.top = `${-10 - h}px`
+        s.style.background = color
         s.style.setProperty('--dx', `${Math.random() * 44 - 22}px`)
         s.style.setProperty('--dy', `${-14 - Math.random() * 30}px`)
         unit.appendChild(s)
         setTimeout(() => s.remove(), 650)
       }
     }
+    burstRef.current = burst
     function say(text: string, wrap = false): void {
       if (bubbleEl) { bubbleEl.remove(); clearTimeout(bubbleTimer) }
       const el = document.createElement('div')
@@ -964,6 +980,7 @@ export const ChatPet: FC = () => {
           onImportPet={handleImportPet}
           onPetSay={(text) => sayRef.current(text, true)}
           onSpeakPool={speakPool}
+          onBurst={(opts) => burstRef.current(opts)}
           onSwitchPet={openPicker}
           memories={memories}
           onRemoveMemory={(id) => { setMemories(removeMemory(id)) }}

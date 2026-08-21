@@ -14,6 +14,16 @@ interface ChatTurn {
   content: string
 }
 
+/** Pet attribute state sent by the browser for context-aware prompts. */
+interface PetStatePayload {
+  mood: number
+  moodLevel: string
+  power: number
+  powerLevel: string
+  health: number
+  healthLevel: string
+}
+
 interface ChatRequestBody {
   petName?: string
   message?: string
@@ -28,6 +38,8 @@ interface ChatRequestBody {
   workspace?: { current?: string; recent?: string[] }
   /** The pet's stored memories about the user (see /memory). */
   memories?: string[]
+  /** Current pet attributes — lets the model reply in-character when hungry/tired/etc. */
+  petState?: PetStatePayload
 }
 
 interface GenerateRequestBody {
@@ -65,6 +77,8 @@ interface WitnessRequestBody {
   day?: WitnessDayPayload
   /** The pet's stored memories about the user — extra material for the log. */
   memories?: string[]
+  /** Current pet attributes — colors the tone of the written log. */
+  petState?: PetStatePayload
 }
 
 interface MemoryRequestBody {
@@ -177,10 +191,12 @@ function personaPrompt(petName: string, persona: string, lang: string): string {
 
 /**
  * Appended context for the chat system prompt: which host session the
- * pet is witnessing plus what it remembers about the user. Both parts
- * are background — the prompt tells the model not to recite them.
+ * pet is witnessing, what it remembers about the user, and how it feels
+ * right now. All parts are background — the prompt tells the model not
+ * to recite them. Pet state is only injected when something is wrong
+ * (hungry, sad, sick) — a healthy pet needs no extra instruction.
  */
-function contextPrompt(lang: string, workspace: { current?: string; recent?: string[] } | undefined, memories: string[] | undefined): string {
+function contextPrompt(lang: string, workspace: { current?: string; recent?: string[] } | undefined, memories: string[] | undefined, petState?: PetStatePayload): string {
   const zh = lang.toLowerCase().startsWith('zh')
   const parts: string[] = []
   const current = (workspace?.current ?? '').trim()
@@ -196,6 +212,17 @@ function contextPrompt(lang: string, workspace: { current?: string; recent?: str
       parts.push(zh
         ? `你对主人的记忆（背景，自然相关时才提起，不要罗列，也不要每句都往上面靠）：\n${list.map(t => `- ${t}`).join('\n')}`
         : `Your memories of the user (background — mention only when naturally relevant, never recite):\n${list.map(t => `- ${t}`).join('\n')}`)
+    }
+  }
+  if (petState !== undefined) {
+    const lows: string[] = []
+    if (petState.moodLevel === 'sad') lows.push(zh ? '心情不太好' : 'in a low mood')
+    if (petState.powerLevel === 'starving' || petState.powerLevel === 'hungry') lows.push(zh ? '肚子很饿、电量很低' : 'very hungry and low on energy')
+    if (petState.healthLevel === 'sick' || petState.healthLevel === 'subhealthy') lows.push(zh ? '身体不太舒服' : 'not feeling well')
+    if (lows.length > 0) {
+      parts.push(zh
+        ? `你现在的状态：${lows.join('，')}。回复时自然地带出这些感受，但不要每句都抱怨。`
+        : `Your current state: ${lows.join(', ')}. Let these feelings show naturally in your replies, but don't complain in every sentence.`)
     }
   }
   return parts.join('\n')
@@ -454,7 +481,7 @@ export function apply(ctx: Context): void {
           }
           const petName = (body.petName ?? '').trim() || '小宠物'
           const system = personaPrompt(petName, body.persona ?? '', body.lang ?? 'zh')
-            + contextPrompt(body.lang ?? 'zh', body.workspace, body.memories)
+            + contextPrompt(body.lang ?? 'zh', body.workspace, body.memories, body.petState)
           const options = {
             provider,
             model,
@@ -559,7 +586,7 @@ export function apply(ctx: Context): void {
             provider,
             model,
             system: personaPrompt(petName, body.persona ?? '', lang)
-              + contextPrompt(lang, undefined, body.memories),
+              + contextPrompt(lang, undefined, body.memories, body.petState),
             messages: [{
               id: crypto.randomUUID(),
               role: 'user',
