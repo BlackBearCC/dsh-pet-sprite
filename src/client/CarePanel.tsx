@@ -11,6 +11,8 @@ import {
   claimLogReward, claimWeekReward, getWitnessDay, getWitnessWeek, getWeekLog,
   recordCare, saveLogText, saveWeekLogText,
 } from './game/witness-log.ts'
+import { memoryTexts, type PetMemory } from './memory.ts'
+import type { WorkspaceView } from './workspace.ts'
 
 interface Props {
   engine: MiniEngine
@@ -24,6 +26,11 @@ interface Props {
   onImportPet: (text: string) => { ok: boolean; name?: string; error?: string } // share-file import (free)
   onPetSay: (text: string) => void // speak through the pet's bubble (wrapped)
   onSwitchPet: () => void // reopen the companion picker
+  memories: PetMemory[] // the pet's stored memories about the user
+  onRemoveMemory: (id: string) => void // drop one memory
+  autoMemory: boolean // automatic memory extraction enabled
+  onAutoMemoryChange: (on: boolean) => void // persist the toggle
+  workspace: WorkspaceView // host session list view (empty on old hosts)
   onClose: () => void
 }
 
@@ -111,13 +118,20 @@ function injectPanelStyles(): void {
 .dsh-pet-sprite-set-err{border:1.5px solid #e8434e;border-radius:8px;background:#ffe9ec;color:#b32832;font-size:10.5px;font-weight:700;padding:6px 9px;margin:6px 0;line-height:1.5;word-break:break-word}
 .dsh-pet-sprite-log{border:1.5px solid #2a2f3e;border-radius:10px;background:#fffbe8;padding:7px 9px;margin-top:8px;font-size:11.5px;font-weight:600;line-height:1.7;color:#1f2430;white-space:pre-wrap;word-break:break-word}
 .dsh-pet-sprite-log-tag{display:inline-block;font-size:9.5px;font-weight:800;color:#9a8c4a;background:#fff3b8;border:1.5px solid #d9c86a;border-radius:999px;padding:0 7px;margin-bottom:5px}
+.dsh-pet-sprite-mem{position:relative;border:1.5px solid #e5e7eb;border-radius:8px;background:#fafbff;padding:5px 24px 5px 8px;margin-bottom:5px}
+.dsh-pet-sprite-mem .tx{font-size:11px;font-weight:700;color:#1f2430;line-height:1.5;word-break:break-word}
+.dsh-pet-sprite-mem .mt{font-size:9.5px;color:#9ca3af;margin-top:2px}
+.dsh-pet-sprite-mem-x{position:absolute;top:4px;right:4px;border:none;background:transparent;color:#9ca3af;font-size:12px;line-height:1;cursor:pointer;padding:2px 4px;border-radius:5px}
+.dsh-pet-sprite-mem-x:hover{background:#ffe9ec;color:#b32832}
+.dsh-pet-sprite-check{display:flex;align-items:flex-start;gap:6px;font-size:10.5px;font-weight:600;color:#374151;line-height:1.5;margin:4px 0 8px;cursor:pointer}
+.dsh-pet-sprite-check input{margin-top:2px;accent-color:#4f6ef7}
 .dsh-pet-sprite-toast{position:fixed;z-index:960;background:#1f2430;color:#fff;font-size:12px;padding:7px 13px;border-radius:9px;box-shadow:0 4px 0 rgba(0,0,0,.2);animation:dshPetSpriteToast 2.6s ease forwards;max-width:260px}
 @keyframes dshPetSpriteToast{from{opacity:0;transform:translateY(8px)}10%,80%{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-6px)}}
 `
   document.head.appendChild(s)
 }
 
-export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, onImportPet, onPetSay, onSwitchPet, onClose }) => {
+export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, onImportPet, onPetSay, onSwitchPet, memories, onRemoveMemory, autoMemory, onAutoMemoryChange, workspace, onClose }) => {
   const [, bump] = useState(0)
   const [tab, setTab] = useState<'status' | 'bag' | 'shop' | 'set'>('status')
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
@@ -287,6 +301,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
           model: chatModel.model,
           scope,
           day,
+          memories: memoryTexts(10),
         }),
       })
       const data = await res.json().catch(() => ({})) as { log?: string; error?: string }
@@ -427,6 +442,32 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                   </div>
                 )}
               </div>
+              <div className="dsh-pet-sprite-sec">
+                <h4>宠物的记忆</h4>
+                {workspace.total > 0 && (
+                  <div className="dsh-pet-sprite-set-note">
+                    主人的工地：{workspace.total} 个会话
+                    {workspace.currentTitle.length > 0 ? `，当前在「${workspace.currentTitle}」` : ''}。
+                  </div>
+                )}
+                {memories.length === 0
+                  ? <div className="dsh-pet-sprite-set-note">还没有记忆——陪主人干几轮活，{petName} 会默默记下值得记的事。</div>
+                  : memories.map(m => (
+                    <div key={m.id} className="dsh-pet-sprite-mem">
+                      <div className="tx">{m.text}</div>
+                      <div className="mt">
+                        {m.sessionTitle.length > 0 ? `来自「${m.sessionTitle}」` : ''}
+                        {m.sessionTitle.length > 0 ? ' · ' : ''}{new Date(m.createdAt).toLocaleDateString()}
+                      </div>
+                      <button className="dsh-pet-sprite-mem-x" title="忘掉这条" onClick={() => onRemoveMemory(m.id)}>×</button>
+                    </div>
+                  ))}
+                {memories.length > 0 && (
+                  <div className="dsh-pet-sprite-set-note">
+                    见证主人干活时顺手记下的（最多 30 条，满了挤掉最旧的）；只存在本地浏览器，聊天和写日志时会想起来。
+                  </div>
+                )}
+              </div>
             </>
           )}
           {tab === 'bag' && (
@@ -542,8 +583,19 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                   <textarea value={linesText('play')} onChange={(e) => setLines('play', e.target.value)} rows={2} placeholder={'再来再来！'} />
                   <label>休息后</label>
                   <textarea value={linesText('rest')} onChange={(e) => setLines('rest', e.target.value)} rows={2} placeholder={'睡饱了～'} />
+                  <label>切换会话（主人换了工地）</label>
+                  <textarea value={linesText('switch')} onChange={(e) => setLines('switch', e.target.value)} rows={2} placeholder={'换个地方啦。\n这个工地我来过吗？'} />
                 </div>
               )}
+              <h4>自动记忆</h4>
+              <label className="dsh-pet-sprite-check">
+                <input
+                  type="checkbox"
+                  checked={autoMemory}
+                  onChange={(e) => onAutoMemoryChange(e.target.checked)}
+                />
+                {petName} 每见证 5 轮完成悄悄记下关于主人的新事实（每天最多 8 次，用当前选的模型）
+              </label>
               <h4>生成新形象</h4>
               <div className="dsh-pet-sprite-set-note">
                 用一句话描述想要的伙伴，模型会画出它的像素形象并加入选择列表（当前 🪙{stats.coins}）。

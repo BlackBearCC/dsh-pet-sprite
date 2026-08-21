@@ -41,6 +41,8 @@ export interface PetProfile {
     play?: string[]
     /** After resting. */
     rest?: string[]
+    /** When the user switches to another DSH session. */
+    switch?: string[]
   }
 }
 
@@ -69,7 +71,7 @@ export function parseProfile(v: unknown): PetProfile {
   const raw = v as { persona?: unknown; lines?: Record<string, unknown> }
   if (typeof raw.persona === 'string') p.persona = raw.persona.trim().slice(0, 500)
   if (raw.lines !== null && typeof raw.lines === 'object' && !Array.isArray(raw.lines)) {
-    for (const key of ['idle', 'work', 'done', 'low', 'feed', 'play', 'rest'] as const) {
+    for (const key of ['idle', 'work', 'done', 'low', 'feed', 'play', 'rest', 'switch'] as const) {
       const cleaned = cleanLines(raw.lines[key])
       if (cleaned !== undefined) p.lines[key] = cleaned
     }

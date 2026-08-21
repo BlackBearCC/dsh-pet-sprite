@@ -10,6 +10,11 @@ import {
 import { drawPet, EGG_ROWS, PET_ART, PET_IDS, PET_META, type Frames, type PetId } from './pet-art.ts'
 import { isCustomPetId } from '../pixel-format.ts'
 import { recordLevelUp, recordTask, recordTurn } from './game/witness-log.ts'
+import { trackWorkspace, type WorkspaceView } from './workspace.ts'
+import {
+  addMemories, autoExtractEnabled, bumpTaskCounter, loadMemories,
+  memoryTexts, removeMemory, setAutoExtract, takeExtractSlot, type PetMemory,
+} from './memory.ts'
 
 // Pet pixel companion, ported from the terminal-web project.
 // Three selectable companions (see pet-art.ts): Poka the original girl,
@@ -113,6 +118,7 @@ const CHAT_LINES = {
   work: ['开工啦。', '让我盯着点……', '在忙,勿扰。'],
   done: ['呼——完成啦。', '又搞定一轮!', '辛苦辛苦。'],
   low: ['有点累了,想休息……', '心情不太好,陪我玩玩?', '能量快见底了……'],
+  switch: ['换个地方啦。', '这个工地我来过吗?', '先熟悉一下环境。', '接着陪主人干活。'],
   drag: ['放我下来!', '抓稳了……', '飞起来咯!'],
 } as const
 function pick(pool: readonly string[]): string {
@@ -182,6 +188,10 @@ export const ChatPet: FC = () => {
   const [chatError, setChatError] = useState<string | null>(null)
   const [chatModel, setChatModel] = useState<ChatModel | null>(() => loadChatModel())
   const [profiles, setProfiles] = useState<Record<string, PetProfile>>(() => loadProfiles())
+  // the pet's memories about the user: global (shared across companions),
+  // kept fresh here for the panel and injected into chat/witness prompts
+  const [memories, setMemories] = useState<PetMemory[]>(() => loadMemories())
+  const [autoMemory, setAutoMemory] = useState<boolean>(() => autoExtractEnabled())
   const engine = getEngine()
   wireWitnessBus(engine)
 
@@ -189,9 +199,17 @@ export const ChatPet: FC = () => {
   const activePet = petId === null ? null : resolvePet(petId, customPets)
   // the active companion's soul; empty profile = all-default voice
   const activeProfile = (petId !== null ? profiles[petId] : undefined) ?? EMPTY_PROFILE
-  // live mirror for the physics effect's closures (see comment there)
+  // live mirrors for the physics effect's closures (see comment there)
   const profileRef = useRef<PetProfile>(EMPTY_PROFILE as PetProfile)
   profileRef.current = activeProfile
+  const chatModelRef = useRef<ChatModel | null>(chatModel)
+  chatModelRef.current = chatModel
+  const petNameRef = useRef('')
+  petNameRef.current = activePet?.name ?? ''
+  // workspace awareness state: the view feeds chat context and the panel
+  const [workspace, setWorkspace] = useState<WorkspaceView>({ total: 0, currentTitle: '', recentTitles: [] })
+  const workspaceRef = useRef(workspace)
+  workspaceRef.current = workspace
 
   const handlePick = (id: string): void => {
     savePetId(id)
@@ -206,6 +224,22 @@ export const ChatPet: FC = () => {
   // styles must exist before the egg renders too (first launch has no
   // petId, and the petId effect below would otherwise never inject them)
   useEffect(() => { injectStyles() }, [])
+
+  // workspace tracker: a real session switch fires the pet's "changed
+  // work site" line (throttled — flipping through the session list must
+  // not machine-gun bubbles)
+  useEffect(() => {
+    let lastSwitchAt = 0
+    return trackWorkspace(
+      (view) => { setWorkspace(view) },
+      () => {
+        const now = Date.now()
+        if (now - lastSwitchAt < 30_000) return
+        lastSwitchAt = now
+        sayRef.current(pick(profileRef.current.lines.switch ?? CHAT_LINES.switch))
+      },
+    )
+  }, [])
 
   // one companion chat round-trip: append the user turn, POST to the
   // plugin's node route, surface the reply as both a history row and a
@@ -238,6 +272,8 @@ export const ChatPet: FC = () => {
           model: chatModel.model,
           lang: navigator.language,
           persona: activeProfile.persona,
+          workspace: { current: workspace.currentTitle, recent: workspace.recentTitles },
+          memories: memoryTexts(10),
         }),
       })
       const data = await res.json().catch(() => ({})) as { reply?: string; error?: string }
@@ -322,6 +358,56 @@ export const ChatPet: FC = () => {
     } finally {
       generateInFlightRef.current = false
     }
+  }
+
+  // memory extraction: every EXTRACT_EVERY completed tasks (and inside
+  // the daily cap) the pet quietly rereads the visible conversation
+  // window and asks its model for 0-2 new facts about the user. This is
+  // background witnessing — failures stay silent, and a model answer of
+  // "nothing worth remembering" is a normal outcome, not an error.
+  const memoryInFlightRef = useRef(false)
+  const maybeExtractMemory = (): void => {
+    if (memoryInFlightRef.current || !autoExtractEnabled()) return
+    const model = chatModelRef.current
+    if (model === null || !takeExtractSlot()) return
+    const nodes = document.querySelectorAll('[data-chat-flow-key]')
+    const parts: string[] = []
+    for (let i = Math.max(0, nodes.length - 10); i < nodes.length; i++) {
+      const el = nodes[i]
+      const who = el.matches('[data-chat-flow-kind="user"]') || el.querySelector('[data-chat-flow-kind="user"]') !== null
+        ? 'User'
+        : 'Assistant'
+      const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 400)
+      if (text.length > 0) parts.push(`${who}: ${text}`)
+    }
+    const recentText = parts.join('\n').slice(0, 4000)
+    if (recentText.trim().length === 0) return
+    memoryInFlightRef.current = true
+    void (async () => {
+      try {
+        const res = await fetch('/plugins/dsh-pet-sprite/memory', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            petName: petNameRef.current,
+            persona: profileRef.current.persona,
+            lang: navigator.language,
+            provider: model.provider,
+            model: model.model,
+            recentText,
+            existing: memoryTexts(15),
+          }),
+        })
+        const data = await res.json().catch(() => ({})) as { memories?: string[]; error?: string }
+        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+        const fresh = Array.isArray(data.memories) ? data.memories : []
+        if (fresh.length > 0) {
+          setMemories(addMemories(fresh, workspaceRef.current.currentTitle))
+          sayRef.current('刚才的事,我记住啦。')
+        }
+      } catch { /* background witnessing: never surface errors */ }
+      finally { memoryInFlightRef.current = false }
+    })()
   }
 
   // profile edits come from the care panel: either a new persona text or a
@@ -449,6 +535,9 @@ export const ChatPet: FC = () => {
         engine.onAssistantDone(outLen)
         recordTask(outLen)
         if (users.length > 0) say(line('done'))
+        // memory extraction paces off completed tasks: every Nth one
+        // (daily-capped) quietly rereads the visible conversation
+        if (bumpTaskCounter()) maybeExtractMemory()
       }
       wasStreaming = streaming
     }
@@ -878,6 +967,11 @@ export const ChatPet: FC = () => {
           onImportPet={handleImportPet}
           onPetSay={(text) => sayRef.current(text, true)}
           onSwitchPet={openPicker}
+          memories={memories}
+          onRemoveMemory={(id) => { setMemories(removeMemory(id)) }}
+          autoMemory={autoMemory}
+          onAutoMemoryChange={(on) => { setAutoExtract(on); setAutoMemory(on) }}
+          workspace={workspace}
           onChatModelChange={m => { setChatModel(m); saveChatModel(m) }}
           onClose={() => setPanelOpen(false)}
         />

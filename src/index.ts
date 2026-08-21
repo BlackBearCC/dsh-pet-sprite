@@ -24,6 +24,10 @@ interface ChatRequestBody {
   lang?: string
   /** User-authored persona (care panel → settings); overrides the default. */
   persona?: string
+  /** Workspace context: the host session the pet is witnessing. */
+  workspace?: { current?: string; recent?: string[] }
+  /** The pet's stored memories about the user (see /memory). */
+  memories?: string[]
 }
 
 interface GenerateRequestBody {
@@ -59,6 +63,20 @@ interface WitnessRequestBody {
   /** 'day' (default) writes today's log; 'week' summarizes the last 7 days. */
   scope?: 'day' | 'week'
   day?: WitnessDayPayload
+  /** The pet's stored memories about the user — extra material for the log. */
+  memories?: string[]
+}
+
+interface MemoryRequestBody {
+  petName?: string
+  persona?: string
+  lang?: string
+  provider?: string
+  model?: string
+  /** Recent conversation window, already bounded by the browser. */
+  recentText?: string
+  /** Memory texts the pet already holds (dedupe targets). */
+  existing?: string[]
 }
 
 // All LLM/web shapes below are structural: the host provides the services,
@@ -155,6 +173,78 @@ function personaPrompt(petName: string, persona: string, lang: string): string {
         'No markdown, lists, or code blocks; never call yourself an AI assistant or a model; no lecturing.',
         'The user is a developer who spends every day with you; naturally caring about their work and rest is in character.',
       ].join('')
+}
+
+/**
+ * Appended context for the chat system prompt: which host session the
+ * pet is witnessing plus what it remembers about the user. Both parts
+ * are background — the prompt tells the model not to recite them.
+ */
+function contextPrompt(lang: string, workspace: { current?: string; recent?: string[] } | undefined, memories: string[] | undefined): string {
+  const zh = lang.toLowerCase().startsWith('zh')
+  const parts: string[] = []
+  const current = (workspace?.current ?? '').trim()
+  const recent = (workspace?.recent ?? []).filter(t => typeof t === 'string' && t.trim().length > 0).slice(0, 5)
+  if (current.length > 0 || recent.length > 0) {
+    parts.push(zh
+      ? `主人当前的工作会话：${current.length > 0 ? `「${current}」` : '（未命名）'}${recent.length > 0 ? `；最近还在忙：${recent.map(t => `「${t.trim().slice(0, 24)}」`).join('、')}` : ''}。`
+      : `The user's current work session: "${current || '(untitled)'}"${recent.length > 0 ? `; also recently working on: ${recent.map(t => `"${t.trim().slice(0, 24)}"`).join(', ')}` : ''}.`)
+  }
+  if (memories !== undefined && memories.length > 0) {
+    const list = memories.filter(t => typeof t === 'string').map(t => t.trim().slice(0, 60)).filter(t => t.length > 0).slice(0, 10)
+    if (list.length > 0) {
+      parts.push(zh
+        ? `你对主人的记忆（背景，自然相关时才提起，不要罗列，也不要每句都往上面靠）：\n${list.map(t => `- ${t}`).join('\n')}`
+        : `Your memories of the user (background — mention only when naturally relevant, never recite):\n${list.map(t => `- ${t}`).join('\n')}`)
+    }
+  }
+  return parts.join('\n')
+}
+
+/**
+ * Memory-extraction prompt: the model reads a recent conversation
+ * window plus the existing memory list and answers with 0-2 new
+ * facts about the user, in the pet's voice, as a JSON string array.
+ */
+function memoryPrompt(lang: string, petName: string, recentText: string, existing: string[]): string {
+  const zh = lang.toLowerCase().startsWith('zh')
+  const have = existing.length > 0
+    ? (zh ? `已有的记忆（相同或相近的不要再记）：\n${existing.map(t => `- ${t}`).join('\n')}` : `Existing memories (do not repeat or paraphrase these):\n${existing.map(t => `- ${t}`).join('\n')}`)
+    : (zh ? '还没有任何记忆。' : 'No memories yet.')
+  return zh
+    ? [
+        `你是像素宠物「${petName}」，刚旁观完主人在编程助手会话里的一段对话。`,
+        have,
+        '请从下面的对话里提炼 0 到 2 条关于主人的新记忆：宠物视角的简明事实句（例如「主人在重构支付模块，被并发 bug 卡住」「主人习惯深夜干活」），每条不超过 40 字，只记事实，不要记闲聊。',
+        '没有值得记的就输出空数组。只输出一个 JSON 字符串数组，例如 ["……","……"]，不要 markdown、不要解释。',
+        `对话片段：\n${recentText}`,
+      ].join('\n')
+    : [
+        `You are "${petName}", a pixel pet that just watched a stretch of the user's coding-assistant conversation.`,
+        have,
+        'Distill 0-2 new memories about the user from the conversation below: short factual notes in the pet\'s perspective (e.g. "the user is refactoring the payment module, stuck on a concurrency bug"), each max 30 words. Facts only, no small talk.',
+        'If nothing is worth remembering, output an empty array. Output ONLY one JSON string array, e.g. ["...","..."] — no markdown, no commentary.',
+        `Conversation excerpt:\n${recentText}`,
+      ].join('\n')
+}
+
+/** Parse the model's memory answer into 0-2 clamped strings; never throws. */
+function parseMemories(reply: string): string[] {
+  let text = reply.trim()
+  const fence = /```(?:json)?\s*([\s\S]*?)```/.exec(text)
+  if (fence?.[1] !== undefined) text = fence[1].trim()
+  const start = text.indexOf('[')
+  const end = text.lastIndexOf(']')
+  if (start >= 0 && end > start) text = text.slice(start, end + 1)
+  try {
+    const v = JSON.parse(text) as unknown
+    if (!Array.isArray(v)) return []
+    return v
+      .filter((s): s is string => typeof s === 'string')
+      .map(s => s.trim().slice(0, 60))
+      .filter(s => s.length > 0)
+      .slice(0, 2)
+  } catch { return [] }
 }
 
 /**
@@ -350,6 +440,7 @@ export function apply(ctx: Context): void {
           }
           const petName = (body.petName ?? '').trim() || '小宠物'
           const system = personaPrompt(petName, body.persona ?? '', body.lang ?? 'zh')
+            + contextPrompt(body.lang ?? 'zh', body.workspace, body.memories)
           const options = {
             provider,
             model,
@@ -453,7 +544,8 @@ export function apply(ctx: Context): void {
           const options = {
             provider,
             model,
-            system: personaPrompt(petName, body.persona ?? '', lang),
+            system: personaPrompt(petName, body.persona ?? '', lang)
+              + contextPrompt(lang, undefined, body.memories),
             messages: [{
               id: crypto.randomUUID(),
               role: 'user',
@@ -469,6 +561,64 @@ export function apply(ctx: Context): void {
             return
           }
           json(res, 200, { log })
+        } catch (error) {
+          json(res, 500, { error: error instanceof Error ? error.message : String(error) })
+        }
+      },
+    }))
+  }
+
+  // ── POST /plugins/dsh-pet-sprite/memory — distill new pet memories ────────
+  // The browser sends a bounded recent-conversation window plus the
+  // memories the pet already holds; the model answers with 0-2 new
+  // facts about the user as a JSON string array. An unparseable or
+  // empty answer is a valid outcome ("nothing worth remembering"),
+  // not an error — the browser stores whatever it gets.
+  if (webServer !== undefined && llm !== undefined) {
+    ctx.effect(() => webServer.register({
+      kind: 'exact',
+      path: '/plugins/dsh-pet-sprite/memory',
+      handler: async (rawReq, rawRes) => {
+        const req = rawReq as ServerRequestLike
+        const res = rawRes as ServerResponseLike
+        try {
+          if (!sameOriginPost(req)) {
+            json(res, 415, { error: 'content-type must be application/json (same-origin)' })
+            return
+          }
+          const body = JSON.parse(await readBody(req)) as MemoryRequestBody
+          const recentText = (body.recentText ?? '').trim().slice(0, 6000)
+          const provider = (body.provider ?? '').trim()
+          const model = (body.model ?? '').trim()
+          if (recentText.length === 0) {
+            json(res, 400, { error: 'recentText is required' })
+            return
+          }
+          if (provider.length === 0 || model.length === 0) {
+            json(res, 400, { error: 'provider and model are required (pick one in the pet settings tab)' })
+            return
+          }
+          const petName = (body.petName ?? '').trim() || '小宠物'
+          const lang = body.lang ?? 'zh'
+          const existing = (body.existing ?? [])
+            .filter((t): t is string => typeof t === 'string')
+            .map(t => t.trim().slice(0, 60))
+            .filter(t => t.length > 0)
+            .slice(0, 30)
+          const options = {
+            provider,
+            model,
+            system: personaPrompt(petName, body.persona ?? '', lang),
+            messages: [{
+              id: crypto.randomUUID(),
+              role: 'user',
+              content: [{ type: 'text', text: memoryPrompt(lang, petName, recentText, existing) }],
+              source: { kind: 'plugin', plugin: 'dsh-pet-sprite' },
+            }],
+            maxTokens: 200,
+          }
+          const reply = await streamText(llm, options)
+          json(res, 200, { memories: parseMemories(reply) })
         } catch (error) {
           json(res, 500, { error: error instanceof Error ? error.message : String(error) })
         }
