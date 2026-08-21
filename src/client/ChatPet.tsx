@@ -45,6 +45,25 @@ function savePetId(id: string): void {
   try { localStorage.setItem(PET_ID_KEY, id) } catch { /* ignore */ }
 }
 
+// ── one-time teasers: shown exactly once, ever (persisted in localStorage) ──
+// The status pill and the WASD control hint are onboarding devices — once
+// the user has seen each of them, they never come back, even across page
+// reloads or companion switches. Storage failure degrades to once per
+// page load, never to "never shown at all".
+const TEASER_SEEN_KEY = 'dshPetSpriteGame:teasersSeen'
+function loadTeasersSeen(): { status?: boolean; ctl?: boolean } {
+  try {
+    const v = JSON.parse(localStorage.getItem(TEASER_SEEN_KEY) ?? '{}') as { status?: boolean; ctl?: boolean }
+    return v && typeof v === 'object' ? v : {}
+  } catch { return {} }
+}
+function markTeaserSeen(kind: 'status' | 'ctl'): void {
+  try {
+    const next = { ...loadTeasersSeen(), [kind]: true }
+    localStorage.setItem(TEASER_SEEN_KEY, JSON.stringify(next))
+  } catch { /* ignore */ }
+}
+
 // ── companion chat: history + model choice persist in localStorage ──────────
 const CHAT_HISTORY_KEY = 'dshPetSpriteChat:history'
 const CHAT_MODEL_KEY = 'dshPetSpriteChat:model'
@@ -70,9 +89,10 @@ function saveChatModel(model: ChatModel | null): void {
   } catch { /* ignore */ }
 }
 
-// module-level: the WASD control hint is taught exactly once per page
-// load — once it faded away, later takeovers stay silent
-let ctlHintShown = false
+// module-level cache of the persisted ctl flag: re-reading localStorage on
+// every takeover is pointless — once taught (per browser profile, persisted
+// in localStorage), the WASD hint never comes back
+let ctlHintShown = loadTeasersSeen().ctl === true
 
 // ── per-pet profiles: persona + event lines (storage in custom-pets.ts) ─────
 
@@ -515,6 +535,9 @@ export const ChatPet: FC = () => {
     // gameplay engine: ticks attribute decay, bridges DSH chat events
     engine.start()
     engine.onLogin()
+    // one-time teasers: read the persisted "already seen" flags once per
+    // mount (markTeaserSeen persists, the flags below decide this mount)
+    const teasersSeen = loadTeasersSeen()
     // status pill = text + a persistent pixel-coin canvas (textContent
     // would wipe the canvas, so updates go through replaceChildren)
     const coinCv = document.createElement('canvas')
@@ -530,15 +553,23 @@ export const ChatPet: FC = () => {
         document.createTextNode(String(s.coins)),
       )
     }
-    const statusTimer = setInterval(renderStatus, 2500)
-    renderStatus()
-    // the pill is a spawn-time teaser: 10s after the pet appears it hides
-    // for good (per mount) — the care panel (right-click) owns the stats
-    // afterwards, and the chat area stays clean
-    const statusHideTimer = setTimeout(() => {
-      if (statusBar) statusBar.style.display = 'none'
-      clearInterval(statusTimer)
-    }, 10_000)
+    // the pill is a one-time teaser: shown only while the user has never
+    // seen it, for 10s after the pet appears, then never again (persisted
+    // across reloads and companion switches) — the care panel (right-click)
+    // owns the stats afterwards, and the chat area stays clean
+    let statusTimer: ReturnType<typeof setInterval> | undefined
+    let statusHideTimer: ReturnType<typeof setTimeout> | undefined
+    if (!teasersSeen.status) {
+      markTeaserSeen('status')
+      statusTimer = setInterval(renderStatus, 2500)
+      renderStatus()
+      statusHideTimer = setTimeout(() => {
+        if (statusBar) statusBar.style.display = 'none'
+        clearInterval(statusTimer)
+      }, 10_000)
+    } else if (statusBar) {
+      statusBar.style.display = 'none'
+    }
 
     // DSH bridges: user message → power drain; assistant done → EXP
     // (every turn also lands in the daily work journal)
@@ -692,10 +723,11 @@ export const ChatPet: FC = () => {
     }
     let ctlFadeTimer: ReturnType<typeof setTimeout> | undefined
     function showCtlHint(): void {
-      // teach the keys exactly once per page load: the first takeover shows
-      // the pill for 10s, every later interaction stays quiet
+      // teach the keys exactly once, ever (persisted): the first takeover
+      // shows the pill for 10s, every later interaction stays silent
       if (!ctlHint || ctlHintShown) return
       ctlHintShown = true
+      markTeaserSeen('ctl')
       ctlHint.style.display = ''
       ctlHint.style.opacity = '1'
       clearTimeout(ctlFadeTimer)
