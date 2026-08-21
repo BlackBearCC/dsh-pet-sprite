@@ -14,6 +14,7 @@ import {
 } from './game/witness-log.ts'
 import { memoryTexts, type PetMemory } from './memory.ts'
 import type { WorkspaceView } from './workspace.ts'
+import { PixelIcon } from './pixel-icons.tsx'
 
 interface Props {
   engine: MiniEngine
@@ -315,7 +316,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
       const claimed = scope === 'day' ? claimLogReward() : claimWeekReward()
       if (claimed) {
         engine.shop.earnCoins(scope === 'day' ? 20 : 50, `witness_${scope}`)
-        say(scope === 'day' ? '见证完成，+🪙20' : '本周见证完成，+🪙50')
+        say(scope === 'day' ? '见证完成，星币 +20' : '本周见证完成，星币 +50')
       } else {
         say(scope === 'day' ? '已更新今日日志' : '已更新本周周报')
       }
@@ -369,7 +370,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
       <div className="dsh-pet-sprite-panel" role="dialog" aria-label="Pet 照顾面板" style={{ left: px, top: py }}>
         <div className="dsh-pet-sprite-panel-hd">
           {petName} <span className="sub">Lv.{stats.level} {stats.title}</span>
-          <span className="coins">🪙 {stats.coins}</span>
+          <span className="coins"><PixelIcon icon="coin" size={12} /> {stats.coins}</span>
           <button className="dsh-pet-sprite-panel-x" onClick={onClose} aria-label="关闭">✕</button>
         </div>
         <div className="dsh-pet-sprite-tabs">
@@ -474,7 +475,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
               {inv.length === 0 && <div style={{ color: '#6b7280', fontSize: 11 }}>背包空空的，去「商店」补货</div>}
               {inv.map((it) => (
                 <div key={it.itemId} className="dsh-pet-sprite-item">
-                  <span className="ic">{it.def.icon}</span>
+                  <span className="ic"><PixelIcon icon={it.def.icon} /></span>
                   <span className="nm">{it.def.name}</span>
                   <span className="fx">{CAT_NAMES[it.def.category] ?? it.def.category}</span>
                   <span className="qty">×{it.quantity < 0 ? '∞' : it.quantity}</span>
@@ -487,9 +488,9 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
             <div className="dsh-pet-sprite-sec">
               {shop.map((it) => (
                 <div key={it.id} className="dsh-pet-sprite-item">
-                  <span className="ic">{it.icon}</span>
+                  <span className="ic"><PixelIcon icon={it.icon} /></span>
                   <span className="nm">{it.name}</span>
-                  <span className="qty">🪙{it.price}</span>
+                  <span className="qty"><PixelIcon icon="coin" size={10} />{it.price}</span>
                   <button className="dsh-pet-sprite-buy" disabled={!it.canBuy} onClick={() => doBuy(it.id)}>购买</button>
                 </div>
               ))}
@@ -592,7 +593,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
               </label>
               <h4>生成新形象</h4>
               <div className="dsh-pet-sprite-set-note">
-                用一句话描述想要的伙伴，模型会画出它的像素形象并加入选择列表（当前 🪙{stats.coins}）。
+                用一句话描述想要的伙伴，模型会画出它的像素形象并加入选择列表（当前 <PixelIcon icon="coin" size={10} />{stats.coins}）。
               </div>
               <input
                 value={genDesc}
@@ -607,7 +608,7 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                 onClick={() => { void doGenerate() }}
                 disabled={generating || genDesc.trim().length === 0}
               >
-                {generating ? '绘制中……' : '生成新伙伴（🪙100）'}
+                {generating ? '绘制中……' : <>生成新伙伴（<PixelIcon icon="coin" size={11} />100）</>}
               </button>
               {genError !== null && <div className="dsh-pet-sprite-set-err">{genError}</div>}
               <h4>导入伙伴</h4>

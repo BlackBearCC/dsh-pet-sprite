@@ -12,7 +12,8 @@ export type StickerCategory = "skill" | "chat" | "decor";
 export interface StickerDef {
   id: string;
   name: string;
-  emoji: string;
+  /** Pixel icon key (see pixel-icons.tsx). */
+  icon: string;
   category: StickerCategory;
   rarity: StickerRarity;
   description: string;
@@ -41,7 +42,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_default_star",
     name: "小星星",
-    emoji: "⭐",
+    icon: "star",
     category: "skill",
     rarity: "common",
     description: "每个人都有一颗星星。",
@@ -50,7 +51,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_default_heart",
     name: "小心心",
-    emoji: "💛",
+    icon: "heart",
     category: "skill",
     rarity: "common",
     description: "暖呼呼的。",
@@ -59,7 +60,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_default_leaf",
     name: "小叶子",
-    emoji: "🌿",
+    icon: "leaf",
     category: "skill",
     rarity: "common",
     description: "新鲜摘的。",
@@ -70,7 +71,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_tech_bug",
     name: "小虫子",
-    emoji: "🐛",
+    icon: "bug",
     category: "skill",
     rarity: "common",
     description: "又来 bug 了。",
@@ -81,7 +82,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_tech_rocket",
     name: "小火箭",
-    emoji: "🚀",
+    icon: "rocket",
     category: "skill",
     rarity: "rare",
     description: "一键部署。",
@@ -92,7 +93,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_tech_lightning",
     name: "闪电",
-    emoji: "⚡",
+    icon: "bolt",
     category: "skill",
     rarity: "epic",
     description: "快到看不见。",
@@ -105,7 +106,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_art_brush",
     name: "画笔",
-    emoji: "🎨",
+    icon: "palette",
     category: "skill",
     rarity: "common",
     description: "随手涂鸦。",
@@ -116,7 +117,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_art_fire",
     name: "灵感之火",
-    emoji: "🔥",
+    icon: "fire",
     category: "skill",
     rarity: "rare",
     description: "烧不尽的创意。",
@@ -127,7 +128,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_art_crown",
     name: "创作之冠",
-    emoji: "👑",
+    icon: "crown",
     category: "skill",
     rarity: "legendary",
     description: "作品封神。",
@@ -140,7 +141,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_office_clip",
     name: "回形针",
-    emoji: "📎",
+    icon: "clip",
     category: "skill",
     rarity: "common",
     description: "夹住一切。",
@@ -151,7 +152,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_office_mug",
     name: "咖啡杯",
-    emoji: "☕",
+    icon: "coffee",
     category: "skill",
     rarity: "rare",
     description: "续命专用。",
@@ -164,7 +165,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_explore_compass",
     name: "指南针",
-    emoji: "🧭",
+    icon: "compass",
     category: "skill",
     rarity: "common",
     description: "永远向前。",
@@ -175,7 +176,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_explore_map",
     name: "藏宝图",
-    emoji: "🗺️",
+    icon: "map",
     category: "skill",
     rarity: "rare",
     description: "X 标记处。",
@@ -186,7 +187,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_explore_gem",
     name: "宝石",
-    emoji: "💎",
+    icon: "gem",
     category: "skill",
     rarity: "legendary",
     description: "稀世珍宝。",
@@ -199,7 +200,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_life_sun",
     name: "小太阳",
-    emoji: "☀️",
+    icon: "sun",
     category: "skill",
     rarity: "common",
     description: "暖洋洋。",
@@ -210,7 +211,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_life_moon",
     name: "小月亮",
-    emoji: "🌙",
+    icon: "moon",
     category: "skill",
     rarity: "rare",
     description: "晚安。",
@@ -223,7 +224,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_social_handshake",
     name: "握手",
-    emoji: "🤝",
+    icon: "handshake",
     category: "skill",
     rarity: "common",
     description: "合作愉快。",
@@ -234,7 +235,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_social_megaphone",
     name: "大喇叭",
-    emoji: "📣",
+    icon: "megaphone",
     category: "skill",
     rarity: "rare",
     description: "全场听到。",
@@ -247,7 +248,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_emotion_rainbow",
     name: "彩虹",
-    emoji: "🌈",
+    icon: "rainbow",
     category: "skill",
     rarity: "rare",
     description: "雨后天晴。",
@@ -258,7 +259,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_emotion_aurora",
     name: "极光",
-    emoji: "🌠",
+    icon: "aurora",
     category: "skill",
     rarity: "epic",
     description: "一生难忘。",
@@ -271,7 +272,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_fun_dice",
     name: "骰子",
-    emoji: "🎲",
+    icon: "dice",
     category: "skill",
     rarity: "common",
     description: "赌一把。",
@@ -282,7 +283,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_fun_joystick",
     name: "手柄",
-    emoji: "🎮",
+    icon: "joystick",
     category: "skill",
     rarity: "rare",
     description: "再来一局。",
@@ -295,7 +296,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_adventure_key",
     name: "金钥匙",
-    emoji: "🗝️",
+    icon: "key",
     category: "skill",
     rarity: "epic",
     description: "打开未知之门。",
@@ -304,7 +305,7 @@ export const STICKER_CATALOG: StickerDef[] = [
   {
     id: "sticker_event_lantern",
     name: "灯笼",
-    emoji: "🏮",
+    icon: "lantern",
     category: "skill",
     rarity: "epic",
     description: "节日限定。",

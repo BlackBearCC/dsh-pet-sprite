@@ -9,6 +9,7 @@ import {
   type CustomPet, type LineKey, type PetProfile,
 } from './custom-pets.ts'
 import { drawPet, EGG_ROWS, PET_ART, PET_IDS, PET_META, type Frames, type PetId } from './pet-art.ts'
+import { drawIcon, ICONS } from './pixel-icons.tsx'
 import { isCustomPetId } from '../pixel-format.ts'
 import { recordLevelUp, recordTask, recordTurn } from './game/witness-log.ts'
 import { trackWorkspace, type WorkspaceView } from './workspace.ts'
@@ -510,11 +511,23 @@ export const ChatPet: FC = () => {
     // gameplay engine: ticks attribute decay, bridges DSH chat events
     engine.start()
     engine.onLogin()
-    const statusTimer = setInterval(() => {
+    // status pill = text + a persistent pixel-coin canvas (textContent
+    // would wipe the canvas, so updates go through replaceChildren)
+    const coinCv = document.createElement('canvas')
+    coinCv.width = 24; coinCv.height = 24
+    coinCv.style.cssText = 'width:9px;height:9px;image-rendering:pixelated;vertical-align:-1px;margin-left:3px'
+    drawIcon(coinCv, ICONS.coin)
+    function renderStatus(): void {
       const s = engine.getStats()
-      if (statusBar) statusBar.textContent = `Lv.${s.level} ${s.title} · 🪙${s.coins}`
-    }, 2500)
-    { const s = engine.getStats(); if (statusBar) statusBar.textContent = `Lv.${s.level} ${s.title} · 🪙${s.coins}` }
+      if (!statusBar) return
+      statusBar.replaceChildren(
+        document.createTextNode(`Lv.${s.level} ${s.title}`),
+        coinCv,
+        document.createTextNode(String(s.coins)),
+      )
+    }
+    const statusTimer = setInterval(renderStatus, 2500)
+    renderStatus()
 
     // DSH bridges: user message → power drain; assistant done → EXP
     // (every turn also lands in the daily work journal)

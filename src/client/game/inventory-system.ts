@@ -55,7 +55,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   巴别鱼罐头: {
     id: "巴别鱼罐头",
     name: "巴别鱼罐头",
-    icon: "🐠",
+    icon: "fish",
     category: "food",
     description: '美味的鱼罐头，管饱。——"把它塞进耳朵里就能听懂宇宙一切语言。" ——指南',
     useText: "罐头开封后，语言能力没有增加，但电量感以十分自信的语气宣布自己有效。",
@@ -66,7 +66,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   不要恐慌胶囊: {
     id: "不要恐慌胶囊",
     name: "不要恐慌胶囊",
-    icon: "💊",
+    icon: "pill",
     category: "medicine",
     description: '吞下去，心情好起来了。——"DON\'T PANIC." ——银河系漫游指南封面',
     useText: "胶囊吞下后，恐慌被折成一张很小的纸条，夹回封面背后。",
@@ -77,7 +77,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   马文牌退烧贴: {
     id: "马文牌退烧贴",
     name: "马文牌退烧贴",
-    icon: "🤖",
+    icon: "robot",
     category: "medicine",
     description: '贴上后身体好多了。——"我脑子有行星那么大，却只能贴退烧贴。" ——马文',
     useText: "退烧贴贴上后，体温终于承认自己刚才有点夸张。",
@@ -89,7 +89,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   宇宙棉花糖: {
     id: "宇宙棉花糖",
     name: "宇宙棉花糖",
-    icon: "☁️",
+    icon: "cloud",
     category: "food",
     description: '入口即化，纯粹的快乐。——"在零重力下它会自己飘进嘴里。" ——星际甜品指南',
     useText: "棉花糖消散得像一朵有临时通行证的云，甜味留下了签收单。",
@@ -99,7 +99,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   星际薯条: {
     id: "星际薯条",
     name: "星际薯条",
-    icon: "🍟",
+    icon: "fries",
     category: "food",
     description: '宇宙快餐标配，分量不大但够顶一阵。——"文明的唯一共识就是薯条。" ——福特·普里弗克特',
     useText: "薯条被逐根注销，账本认定文明暂时没有崩塌。",
@@ -110,7 +110,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   毛巾: {
     id: "毛巾",
     name: "毛巾",
-    icon: "🧣",
+    icon: "scarf",
     category: "toy",
     description: '安全感满满，但玩着玩着会耗电。——"知道毛巾在哪的人，值得信赖。" ——指南',
     useText: "毛巾展开后，安全感像一条备用路线，被认真塞进了账本边角。",
@@ -121,7 +121,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   假装正常药水: {
     id: "假装正常药水",
     name: "假装正常药水",
-    icon: "🧪",
+    icon: "potion",
     category: "medicine",
     description: '喝完看起来完全正常了。——"正常只是一种统计学幻觉。" ——赞福德·毕乔布莱斯特',
     useText: "药水完成了外观层面的正常化，剩下的荒谬被标注为系统特性。",
@@ -133,7 +133,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   心灵感应茶: {
     id: "心灵感应茶",
     name: "心灵感应茶",
-    icon: "🍵",
+    icon: "tea",
     category: "food",
     description: '据说喝完能短暂读懂猫的心思。——"它想要的只是鱼罐头，一直都是。" ——匿名猫语翻译器',
     useText: "茶杯见底后，猫语翻译器短暂亮灯，又立刻假装无事发生。",
@@ -143,7 +143,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   猫薄荷星云: {
     id: "猫薄荷星云",
     name: "猫薄荷星云",
-    icon: "🌿",
+    icon: "leaf",
     category: "toy",
     description: '稀有猫薄荷，极度愉悦但消耗体力。——"整个星系都是我的猫抓板。" ——某只太空猫',
     useText: "星云被拨散后，快乐以螺旋形式占领了附近的注释栏。",
@@ -155,7 +155,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   福特的三明治: {
     id: "福特的三明治",
     name: "福特的三明治",
-    icon: "🥪",
+    icon: "sandwich",
     category: "food",
     description:
       '福特的私房配方，份量管够。——"在毁灭前吃顿好的，这是银河系的传统。" ——福特·普里弗克特',
@@ -166,7 +166,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   概率修复喷雾: {
     id: "概率修复喷雾",
     name: "概率修复喷雾",
-    icon: "💨",
+    icon: "spray",
     category: "medicine",
     description:
       '非概率物理学的医疗应用。——"在一个不可能的宇宙里，治愈也是不可能的简单。" ——非概率实验室',
@@ -180,7 +180,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   泛银河爆破饮: {
     id: "泛银河爆破饮",
     name: "泛银河爆破饮",
-    icon: "🌌",
+    icon: "galaxy",
     category: "food",
     description: '喝完像被柠檬包裹的金砖砸中脑袋。——"宇宙中最烈的酒。" ——指南',
     useText: "饮料抵达胃部时没有敲门，随后把精神状态改写成大写备注。",
@@ -191,7 +191,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   沃贡诗集护盾: {
     id: "沃贡诗集护盾",
     name: "沃贡诗集护盾",
-    icon: "📖",
+    icon: "book",
     category: "medicine",
     description: '听完沃贡诗活下来后获得的免疫力。——"宇宙第三差的诗，但吃不死人。" ——指南',
     useText: "诗集被合上后，幸存本身成为一层很不情愿的护盾。",
@@ -202,7 +202,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   时间漩涡甜甜圈: {
     id: "时间漩涡甜甜圈",
     name: "时间漩涡甜甜圈",
-    icon: "🍩",
+    icon: "donut",
     category: "food",
     description: '扭曲时空的甜甜圈，加速一切冷却。——"时间是一种幻觉，午餐时间尤其如此。" ——福特',
     useText: "甜甜圈咬开的一瞬间，时间排队顺序被悄悄改成了甜味优先。",
@@ -216,7 +216,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   深思重启针: {
     id: "深思重启针",
     name: "深思重启针",
-    icon: "💉",
+    icon: "syringe",
     category: "medicine",
     description: '完全恢复健康。——"七百五十万年的计算，总得有个重启按钮。" ——深思',
     useText: "针剂启动后，身体把旧结论清空，重新计算出一个更能继续运行的答案。",
@@ -226,7 +226,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   无限非概率燃料: {
     id: "无限非概率燃料",
     name: "无限非概率燃料",
-    icon: "⚡",
+    icon: "bolt",
     category: "special",
     description: '黄金之心号的核心动力源。——"只要你不在意变成一条沙丁鱼的概率。" ——崔莉恩',
     useText: "燃料入账后，现实短暂绕路；账本只记录结果，不记录路线。",
@@ -239,7 +239,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   生命宇宙万物答案: {
     id: "生命宇宙万物答案",
     name: "生命宇宙万物答案",
-    icon: "4️⃣2️⃣",
+    icon: "answer42",
     category: "special",
     description: '答案是42，但问题是什么？使用后2h经验+50%。——"四十二。" ——深思',
     useText: "答案被确认仍是数字，问题被暂时放弃追责。",
@@ -250,7 +250,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   马格拉斯定制星球: {
     id: "马格拉斯定制星球",
     name: "马格拉斯定制星球",
-    icon: "🪐",
+    icon: "planet",
     category: "toy",
     description:
       '掌心大小的定制星球，把玩时可能触发探险。——"我们造星球，订单排到了五百万年后。" ——马格拉斯工厂',
@@ -264,7 +264,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   金心号舱票: {
     id: "金心号舱票",
     name: "金心号舱票",
-    icon: "🎫",
+    icon: "ticket",
     category: "special",
     description: '登上黄金之心号！重置一切冷却。——"偷来的飞船开起来更带劲。" ——赞福德',
     useText: "舱票打孔后，所有冷却被请到另一条时间线上重新排队。",
@@ -277,7 +277,7 @@ export const ITEM_DEFS: Record<string, ItemDef> = {
   上帝的最后留言: {
     id: "上帝的最后留言",
     name: "上帝的最后留言",
-    icon: "✉️",
+    icon: "letter",
     category: "special",
     description: '使用后24h解锁隐藏人格。——"抱歉给你们带来不便。" ——上帝',
     useText: "留言被读完后，世界没有解释自己，只留下一个可疑的运行许可。",
@@ -294,7 +294,7 @@ for (const s of STICKER_CATALOG) {
     ITEM_DEFS[s.id] = {
       id: s.id,
       name: s.name,
-      icon: s.emoji,
+      icon: s.icon,
       category: "collection",
       description: s.description,
       effects: {},
@@ -414,25 +414,25 @@ export class InventorySystem {
     adventure_book: {
       id: "adventure_book",
       name: "冒险书",
-      icon: "📖",
+      icon: "book",
       description: "你的冒险故事集",
     },
     memorial: {
       id: "memorial",
       name: "纪念品",
-      icon: "🏆",
+      icon: "trophy",
       description: "珍贵的回忆",
     },
     achievement: {
       id: "achievement",
       name: "成就徽章",
-      icon: "🏅",
+      icon: "medal",
       description: "达成的成就",
     },
     special: {
       id: "special",
       name: "特殊物品",
-      icon: "✨",
+      icon: "sparkle",
       description: "特殊的收藏品",
     },
   } as const;
