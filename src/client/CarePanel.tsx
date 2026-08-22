@@ -37,6 +37,9 @@ interface Props {
   memories: PetMemory[] // the pet's stored memories about the user
   onRemoveMemory: (id: string) => void // drop one memory
   autoMemory: boolean // automatic memory extraction enabled
+  /** Vine-climb overlay for high platforms (default off: covers text). */
+  vineClimb: boolean
+  onVineClimbChange: (on: boolean) => void
   onAutoMemoryChange: (on: boolean) => void // persist the toggle
   workspace: WorkspaceView // host session list view (empty on old hosts)
   onClose: () => void
@@ -139,7 +142,7 @@ function injectPanelStyles(): void {
   document.head.appendChild(s)
 }
 
-export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, customCount, onImportPet, onPetSay, onSpeakPool, onBurst, onPlayRunner, onSwitchPet, memories, onRemoveMemory, autoMemory, onAutoMemoryChange, workspace, onClose }) => {
+export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onChatModelChange, profile, onProfileChange, onGeneratePet, customCount, onImportPet, onPetSay, onSpeakPool, onBurst, onPlayRunner, onSwitchPet, memories, onRemoveMemory, autoMemory, onAutoMemoryChange, vineClimb, onVineClimbChange, workspace, onClose }) => {
   const [, bump] = useState(0)
   const [tab, setTab] = useState<'status' | 'bag' | 'shop' | 'set'>('status')
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
@@ -595,6 +598,15 @@ export const CarePanel: FC<Props> = ({ engine, anchor, petName, chatModel, onCha
                   onChange={(e) => onAutoMemoryChange(e.target.checked)}
                 />
                 {petName} 每见证 5 轮完成悄悄记下关于主人的新事实（每天最多 8 次，用当前选的模型）
+              </label>
+              <h4>藤蔓攀爬</h4>
+              <label className="dsh-pet-sprite-check">
+                <input
+                  type="checkbox"
+                  checked={vineClimb}
+                  onChange={(e) => onVineClimbChange(e.target.checked)}
+                />
+                高处平台长出藤蔓爬上去（藤蔓会盖住消息文字，默认关闭；关闭时只跳向够得着的气泡）
               </label>
               <h4>生成新形象</h4>
               <div className="dsh-pet-sprite-set-note">

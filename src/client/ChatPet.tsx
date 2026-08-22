@@ -55,6 +55,16 @@ function savePetId(id: string): void {
 // reloads or companion switches. Storage failure degrades to once per
 // page load, never to "never shown at all".
 const TEASER_SEEN_KEY = 'dshPetSpriteGame:teasersSeen'
+// vine-climb toggle (default OFF: the vine is a decorative overlay that can
+// cover conversation text, so it only appears for users who opt in)
+const VINE_KEY = 'dshPetSpriteGame:vineClimb'
+function vineEnabled(): boolean {
+  try { return localStorage.getItem(VINE_KEY) === '1' } catch { return false }
+}
+function setVineEnabled(on: boolean): void {
+  try { localStorage.setItem(VINE_KEY, on ? '1' : '0') } catch { /* best-effort */ }
+  schedulePush()
+}
 function loadTeasersSeen(): { status?: boolean; ctl?: boolean } {
   try {
     const v = JSON.parse(localStorage.getItem(TEASER_SEEN_KEY) ?? '{}') as { status?: boolean; ctl?: boolean }
@@ -742,6 +752,7 @@ const ChatPetImpl: FC = () => {
     // 藤蔓元素：攀爬时从地面长到平台顶，宠物贴着往上爬
     let vineEl: HTMLDivElement | null = null
     function vineTo(topY: number, vx: number): void {
+      if (!vineEnabled()) return   // 默认关闭：不开开关就不画藤蔓
       if (vineEl) vineEl.remove()
       const el = document.createElement('div')
       el.className = 'dsh-pet-sprite-vine'
@@ -777,13 +788,16 @@ const ChatPetImpl: FC = () => {
     }
     function plan(now: number): void {
       planAt = now + 1200 + Math.random() * 1800
-      // 上层目标只从可落脚平台（用户气泡/输入框）里选——高处走藤蔓
-      const ups = landings.filter(p => p.y > h + 30 && p.y < h + 560)
+      // 上层目标只从可落脚平台（用户气泡/输入框）里选。
+      // 藤蔓开启：高平台走藤蔓；关闭：只选跳得着的（大跳上限 202px，
+      // 取 190px 余量）——够不着就当没看见，杜绝对着高处凭空跳。
+      const maxUp = vineEnabled() ? 560 : 190
+      const ups = landings.filter(p => p.y > h + 30 && p.y < h + maxUp)
       const r = Math.random()
       if (r < .34 || ups.length === 0) { goal = { x: 12 + Math.random() * Math.max(20, floorX - 76) }; return }
       const c = ups[Math.floor(Math.random() * ups.length)]
       if (c.y - h <= 200) { goal = { x: Math.max(c.x1, Math.min(c.x2 - PW, x)), jump: c } }
-      else if (r < .8) startClimb(c)
+      else if (vineEnabled()) startClimb(c)   // 开了藤蔓才爬高墙
       else if (h > 0 && plat) goal = { x: Math.random() < .5 ? plat.x1 - 40 : plat.x2 + 8 }
     }
     // 落地扬尘：脚下喷出小土云（像素风，暖灰），强度随落速
@@ -1210,6 +1224,8 @@ const ChatPetImpl: FC = () => {
           memories={memories}
           onRemoveMemory={(id) => { setMemories(removeMemory(id)) }}
           autoMemory={autoMemory}
+          vineClimb={vineEnabled()}
+          onVineClimbChange={(on) => { setVineEnabled(on) }}
           onAutoMemoryChange={(on) => { setAutoExtract(on); setAutoMemory(on) }}
           workspace={workspace}
           onChatModelChange={m => { setChatModel(m); saveChatModel(m) }}

@@ -46,6 +46,7 @@ const SLICES: Array<{ blob: string; ls: string; raw?: boolean }> = [
   { blob: 'memoriesCounter', ls: 'dshPetSpriteMemory:counter', raw: true }, // bare number-as-string
   { blob: 'memoriesAuto', ls: 'dshPetSpriteMemory:auto', raw: true },  // bare '1' / '0'
   { blob: 'lastLogin', ls: 'dshPetSpriteGame:lastLogin', raw: true },  // bare 'YYYY-MM-DD'
+  { blob: 'vineClimb', ls: 'dshPetSpriteGame:vineClimb', raw: true },  // bare '1' / '0' (default off)
   { blob: 'witnessDays', ls: 'dshPetSpriteWitness:days' },             // daily work journal
 ]
 
