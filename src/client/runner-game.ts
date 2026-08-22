@@ -174,18 +174,19 @@ export function runRunnerGame(frames: Frames, onCoin: (n: number) => void): Prom
 
       // ── draw ──
       x.clearRect(0, 0, W, H)
-      // sky bands (theme-aware-ish: flat, calm)
-      x.fillStyle = '#dceefb'
+      // sky bands: follow the DSH theme (dark theme → dusk sky)
+      const dark = typeof document !== 'undefined' && document.body.hasAttribute('data-ds-dark-theme')
+      x.fillStyle = dark ? '#232a38' : '#dceefb'
       x.fillRect(0, 0, W, GROUND_Y)
-      x.fillStyle = '#c3d9ef'
+      x.fillStyle = dark ? '#2c3546' : '#c3d9ef'
       for (let i = 0; i < 6; i++) {
         const cx = ((i * 130 + groundScroll * 0.25) % (W + 120)) - 60
         x.fillRect(cx, 24 + (i % 3) * 26, 46, 10)
       }
       // ground
-      x.fillStyle = '#9db88f'
+      x.fillStyle = dark ? '#3d4a3a' : '#9db88f'
       x.fillRect(0, GROUND_Y, W, H - GROUND_Y)
-      x.fillStyle = '#87a17a'
+      x.fillStyle = dark ? '#333f31' : '#87a17a'
       for (let gx = groundScroll % 32; gx < W; gx += 32) x.fillRect(gx, GROUND_Y, 16, 6)
 
       // obstacles

@@ -126,14 +126,14 @@ function injectPanelStyles(): void {
 .dsh-pet-sprite-import-row{display:flex;gap:6px}
 .dsh-pet-sprite-import-row .dsh-pet-sprite-btn{flex:1}
 .dsh-pet-sprite-paste-box{margin-bottom:6px}
-.dsh-pet-sprite-set-err{border:1.5px solid #e8434e;border-radius:8px;background:#ffe9ec;color:#b32832;font-size:10.5px;font-weight:700;padding:6px 9px;margin:6px 0;line-height:1.5;word-break:break-word}
+.dsh-pet-sprite-set-err{border:1.5px solid var(--dsw-alias-state-error-secondary,#e8434e);border-radius:8px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#e8434e) 10%,var(--dsw-alias-bg-layer-1,#fff));color:var(--dsw-alias-state-error-secondary,#b32832);font-size:10.5px;font-weight:700;padding:6px 9px;margin:6px 0;line-height:1.5;word-break:break-word}
 .dsh-pet-sprite-log{border:1.5px solid #2a2f3e;border-radius:10px;background:var(--dsw-specific-bubble,#fffbe8);padding:7px 9px;margin-top:8px;font-size:11.5px;font-weight:600;line-height:1.7;color:#1f2430;white-space:pre-wrap;word-break:break-word}
 .dsh-pet-sprite-log-tag{display:inline-block;font-size:9.5px;font-weight:800;color:var(--dsw-alias-label-secondary,#9a8c4a);background:var(--dsw-alias-state-warn-tertiary,#fff3b8);border:1.5px solid #d9c86a;border-radius:999px;padding:0 7px;margin-bottom:5px}
 .dsh-pet-sprite-mem{position:relative;border:1.5px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:8px;background:#fafbff;padding:5px 24px 5px 8px;margin-bottom:5px}
 .dsh-pet-sprite-mem .tx{font-size:11px;font-weight:700;color:#1f2430;line-height:1.5;word-break:break-word}
 .dsh-pet-sprite-mem .mt{font-size:9.5px;color:#9ca3af;margin-top:2px}
 .dsh-pet-sprite-mem-x{position:absolute;top:4px;right:4px;border:none;background:transparent;color:#9ca3af;font-size:12px;line-height:1;cursor:pointer;padding:2px 4px;border-radius:5px}
-.dsh-pet-sprite-mem-x:hover{background:#ffe9ec;color:#b32832}
+.dsh-pet-sprite-mem-x:hover{background:var(--dsw-alias-interactive-bg-hover-danger,#ffe9ec);color:var(--dsw-alias-state-error-secondary,#b32832)}
 .dsh-pet-sprite-check{display:flex;align-items:flex-start;gap:6px;font-size:10.5px;font-weight:600;color:#374151;line-height:1.5;margin:4px 0 8px;cursor:pointer}
 .dsh-pet-sprite-check input{margin-top:2px;accent-color:#4f6ef7}
 .dsh-pet-sprite-toast{position:fixed;z-index:960;background:#1f2430;color:#fff;font-size:12px;padding:7px 13px;border-radius:9px;box-shadow:0 4px 0 rgba(0,0,0,.2);animation:dshPetSpriteToast 2.6s ease forwards;max-width:260px}

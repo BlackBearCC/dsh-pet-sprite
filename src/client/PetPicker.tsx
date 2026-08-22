@@ -57,10 +57,10 @@ function injectPickerStyles(): void {
 .dsh-pet-sprite-picker-card canvas{width:72px;height:84px;image-rendering:pixelated;display:block;margin:0 auto}
 .dsh-pet-sprite-picker-card .nm{display:block;font-size:14px;font-weight:800;color:var(--dsw-alias-label-primary,#4a4553);margin-top:8px}
 .dsh-pet-sprite-picker-card .tg{display:block;font-size:10.5px;font-weight:600;color:var(--dsw-alias-label-tertiary,#9a95a5);margin-top:3px;line-height:1.45}
-.dsh-pet-sprite-picker-card.cur::before{content:'当前';position:absolute;top:-11px;right:10px;font-size:10px;font-weight:800;color:var(--dsw-alias-label-primary,#4a4553);background:#ffd33d;border:2px solid var(--dsw-alias-label-primary,#4a4553);border-radius:999px;padding:1px 8px;box-shadow:0 2px 0 rgba(0,0,0,.15)}
+.dsh-pet-sprite-picker-card.cur::before{content:'当前';position:absolute;top:-11px;right:10px;font-size:10px;font-weight:800;color:var(--dsw-alias-label-primary,#4a4553);background:var(--dsw-alias-state-warn-secondary,#ffd33d);border:2px solid var(--dsw-alias-label-primary,#4a4553);border-radius:999px;padding:1px 8px;box-shadow:0 2px 0 rgba(0,0,0,.15)}
 .dsh-pet-sprite-picker-card.picked{transform:scale(1.07) rotate(0deg);background:var(--dsw-specific-bubble,#fffbe8);box-shadow:0 8px 0 rgba(0,0,0,.2)}
 .dsh-pet-sprite-picker-card.dim{opacity:.45;transform:scale(.96)}
-.dsh-pet-sprite-picker-share{position:absolute;bottom:8px;right:8px;font-size:10px;font-weight:800;color:var(--dsw-alias-label-primary,#4a4553);background:#ffd33d;border:2px solid var(--dsw-alias-label-primary,#4a4553);border-radius:999px;padding:1px 8px;box-shadow:0 2px 0 rgba(0,0,0,.15);cursor:pointer;user-select:none}
+.dsh-pet-sprite-picker-share{position:absolute;bottom:8px;right:8px;font-size:10px;font-weight:800;color:var(--dsw-alias-label-primary,#4a4553);background:var(--dsw-alias-state-warn-secondary,#ffd33d);border:2px solid var(--dsw-alias-label-primary,#4a4553);border-radius:999px;padding:1px 8px;box-shadow:0 2px 0 rgba(0,0,0,.15);cursor:pointer;user-select:none}
 .dsh-pet-sprite-picker-share:hover{background:#ffe27a;transform:scale(1.08)}
 .dsh-pet-sprite-picker-share:active{transform:scale(.92)}
 .dsh-pet-sprite-picker-card .tg{padding-bottom:18px}
