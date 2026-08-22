@@ -143,6 +143,10 @@ function wireWitnessBus(engine: MiniEngine, burstRef: React.MutableRefObject<(op
 type PetMode = 'idle' | 'work'
 
 interface Platform { x1: number; x2: number; y: number }
+// where the pet may land: user message bubbles (每条用户消息) and the
+// composer card. Assistant bubbles are readable text — the pet never
+// stands on them (不阻挡文字显示).
+interface Landing extends Platform { kind: 'user' | 'composer' }
 
 // ── styles ───────────────────────────────────────────────────────────────────
 let styleInjected = false
@@ -156,6 +160,12 @@ function injectStyles(): void {
 .dsh-pet-sprite-unit canvas{width:100%;height:100%;image-rendering:pixelated;display:block}
 .dsh-pet-sprite-spark{position:absolute;z-index:6;width:6px;height:6px;background:#ffd33d;border:1px solid rgba(0,0,0,.25);pointer-events:none;animation:dshPetSpriteSpark .6s ease-out forwards}
 @keyframes dshPetSpriteSpark{to{transform:translate(var(--dx),var(--dy));opacity:0}}
+.dsh-pet-sprite-dust{position:absolute;z-index:5;width:7px;height:7px;background:#b9a98f;border:1.5px solid rgba(0,0,0,.22);border-radius:50%;pointer-events:none;transform-origin:50% 100%;animation:dshPetSpriteDust .5s ease-out forwards}
+@keyframes dshPetSpriteDust{0%{transform:translate(0,0) scale(var(--ds,1));opacity:.95}100%{transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0}}
+.dsh-pet-sprite-vine{position:absolute;bottom:0;width:5px;background:linear-gradient(#5f9e4e,#3f7a34);border:1px solid rgba(0,0,0,.28);border-radius:3px;z-index:4;pointer-events:none;transform-origin:50% 100%;animation:dshPetSpriteVineGrow .7s cubic-bezier(.3,1.4,.5,1) both}
+@keyframes dshPetSpriteVineGrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.dsh-pet-sprite-vine-leaf{position:absolute;width:9px;height:7px;background:#6fb857;border:1px solid rgba(0,0,0,.25);border-radius:60% 10% 60% 10%;pointer-events:none;animation:dshPetSpriteLeafSway 1.6s ease-in-out infinite}
+@keyframes dshPetSpriteLeafSway{0%,100%{transform:scaleX(var(--lf,1)) rotate(-6deg)}50%{transform:scaleX(var(--lf,1)) rotate(8deg)}}
 .dsh-pet-sprite-ctl{position:absolute;top:-30px;right:-8px;z-index:6;font:800 10.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:var(--dsh-card,#fff);border:2px solid rgba(0,0,0,.18);border-radius:999px;padding:3px 10px;color:var(--dsw-alias-label-secondary,#7b8190);pointer-events:none;box-shadow:0 2px 0 rgba(0,0,0,.12);white-space:nowrap;transition:opacity .55s}
 .dsh-pet-sprite-bubble{position:absolute;bottom:calc(100% + 9px);left:50%;z-index:7;max-width:190px;background:var(--dsw-alias-bg-layer-1,#fff);border:2.5px solid var(--dsw-alias-label-primary,#4a4553);border-radius:12px;padding:4px 11px;font:700 11.5px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;color:var(--dsw-alias-label-primary,#4a4553);white-space:nowrap;pointer-events:none;box-shadow:0 2.5px 0 rgba(0,0,0,.15);animation:dshPetSpriteBubbleIn .5s cubic-bezier(.2,1.7,.4,1) both}
 .dsh-pet-sprite-bubble::after{content:'';position:absolute;top:calc(100% - 6.5px);left:50%;width:11px;height:11px;background:var(--dsw-alias-bg-layer-1,#fff);border-right:2.5px solid #4a4553;border-bottom:2.5px solid #4a4553;transform:translateX(-50%) rotate(45deg)}
@@ -663,7 +673,8 @@ const ChatPetImpl: FC = () => {
     let goal: { x: number; jump?: Platform } | null = null
     let climb: { x: number; top: number; p: Platform } | null = null
     let ft = 0, ftAcc = 0, lastFrame: string[] | null = null, lastT = 0, planAt = 0
-    let plats: Platform[] = [], platsAt = 0
+    let landings: Landing[] = []   // landable platforms ONLY: user bubbles + composer
+    let platsAt = 0
     let mode: PetMode = 'idle'
     // attribute levels, polled in the tick loop for visual state feedback
     let petMoodLevel = 'normal', petPowerLevel = 'normal', petHealthLevel = 'normal'
@@ -688,27 +699,35 @@ const ChatPetImpl: FC = () => {
     }
     function scanPlats(): void {
       const fr = playground()
-      if (!fr) { plats = []; return }
-      const out: Platform[] = []
+      if (!fr) { landings = []; return }
+      const land: Landing[] = []
       const els = document.querySelectorAll('[data-chat-flow-key]')
       for (let i = Math.max(0, els.length - 30); i < els.length; i++) {
-        const r = els[i].getBoundingClientRect()
+        const el = els[i]
+        // only USER bubbles are landable — assistant text stays readable
+        // (the pet never stands on the agent's answers)
+        const isUser = el.matches('[data-chat-flow-kind="user"]')
+          || el.querySelector('[data-chat-flow-kind="user"]') !== null
+        if (!isUser) continue
+        const r = el.getBoundingClientRect()
         if (r.width < 70 || r.bottom < 20 || r.top <= 0 || r.top >= fr.bottom - 24) continue
-        out.push({ x1: r.left - fr.left, x2: r.right - fr.left, y: fr.bottom - 4 - r.top })
+        land.push({ x1: r.left - fr.left, x2: r.right - fr.left, y: fr.bottom - 4 - r.top, kind: 'user' })
       }
-      // the composer card is a wide, stable platform near the bottom
+      // the composer card (输入框) is a wide, stable platform near the bottom
       const comp = document.querySelector('[data-composer-card]')
       if (comp) {
         const r = comp.getBoundingClientRect()
         if (r.width >= 100 && r.top > 20) {
-          out.push({ x1: r.left - fr.left, x2: r.right - fr.left, y: fr.bottom - 4 - r.top })
+          land.push({ x1: r.left - fr.left, x2: r.right - fr.left, y: fr.bottom - 4 - r.top, kind: 'composer' })
         }
       }
-      plats = out
+      landings = land
     }
     function support(): boolean {
       if (!plat) return true
-      for (const p of plats) {
+      // 支撑判定只认可落脚平台：assistant 气泡「消失/滚动」后宠物会掉下去，
+      // 而不是悬空站在文字上
+      for (const p of landings) {
         if (Math.abs(p.y - h) < 26 && x + PW / 2 > p.x1 - 4 && x + PW / 2 < p.x2 + 4) { plat = p; h = p.y; return true }
       }
       return false
@@ -720,14 +739,46 @@ const ChatPetImpl: FC = () => {
       if (need > JUMPV + 60) burst()
       return true
     }
+    // 藤蔓元素：攀爬时从地面长到平台顶，宠物贴着往上爬
+    let vineEl: HTMLDivElement | null = null
+    function vineTo(topY: number, vx: number): void {
+      if (vineEl) vineEl.remove()
+      const el = document.createElement('div')
+      el.className = 'dsh-pet-sprite-vine'
+      el.style.left = `${vx}px`
+      el.style.height = `${Math.round(topY)}px`
+      // layer 是全屏层：藤蔓底在地板线上（floorY = playground.bottom - 4）
+      const vfr2 = playground()
+      if (vfr2) el.style.bottom = `${Math.max(0, window.innerHeight - vfr2.bottom + 4)}px`
+      else el.style.bottom = '4px'
+      // 缠绕的小叶子
+      for (let i = 0; i < Math.floor(topY / 34); i++) {
+        const leaf = document.createElement('span')
+        leaf.className = 'dsh-pet-sprite-vine-leaf'
+        leaf.style.bottom = `${8 + i * 34 + Math.random() * 10}px`
+        leaf.style.setProperty('--lf', i % 2 === 0 ? '1' : '-1')
+        leaf.style.animationDelay = `${Math.random() * 0.5}s`
+        el.appendChild(leaf)
+      }
+      layer.appendChild(el)
+      vineEl = el
+    }
+    function vineClear(): void {
+      if (vineEl) { vineEl.remove(); vineEl = null }
+    }
+
     function startClimb(p: Platform): void {
       const edge = Math.abs(x - p.x1) < Math.abs(x - p.x2) ? p.x1 - 12 : p.x2 - PW + 12
       climb = { x: edge, top: p.y, p }
       goal = { x: edge }
+      // 藤蔓从脚下长到目标平台顶（挂 world 层 layer：固定在攀爬点，不随宠物移动）
+      const vfr = playground()
+      if (vfr) vineTo(p.y, vfr.left + edge + 22)
     }
     function plan(now: number): void {
       planAt = now + 1200 + Math.random() * 1800
-      const ups = plats.filter(p => p.y > h + 30 && p.y < h + 560)
+      // 上层目标只从可落脚平台（用户气泡/输入框）里选——高处走藤蔓
+      const ups = landings.filter(p => p.y > h + 30 && p.y < h + 560)
       const r = Math.random()
       if (r < .34 || ups.length === 0) { goal = { x: 12 + Math.random() * Math.max(20, floorX - 76) }; return }
       const c = ups[Math.floor(Math.random() * ups.length)]
@@ -735,6 +786,26 @@ const ChatPetImpl: FC = () => {
       else if (r < .8) startClimb(c)
       else if (h > 0 && plat) goal = { x: Math.random() < .5 ? plat.x1 - 40 : plat.x2 + 8 }
     }
+    // 落地扬尘：脚下喷出小土云（像素风，暖灰），强度随落速
+    function dust(pv: number): void {
+      if (still) return
+      const speed = Math.abs(pv)
+      const n = Math.min(7, 2 + Math.floor(speed / 160))
+      for (let i = 0; i < n; i++) {
+        const s = document.createElement('span')
+        s.className = 'dsh-pet-sprite-dust'
+        // 左右对称喷洒，脚跟位置（unit 底部）
+        const side = i % 2 === 0 ? -1 : 1
+        s.style.left = `${22 + side * (3 + Math.random() * 9)}px`
+        s.style.bottom = '0px'
+        s.style.setProperty('--dx', `${side * (10 + Math.random() * 26)}px`)
+        s.style.setProperty('--dy', `${-(4 + Math.random() * 14)}px`)
+        s.style.setProperty('--ds', `${0.7 + Math.random() * 0.6}`)
+        unit.appendChild(s)
+        setTimeout(() => s.remove(), 550)
+      }
+    }
+
     function burst(opts?: { count?: number; color?: string }): void {
       if (still) return
       const count = opts?.count ?? 6
@@ -795,11 +866,11 @@ const ChatPetImpl: FC = () => {
       }
     }
     function tryClimbNear(): boolean {
-      for (const p of plats) {
+      for (const p of landings) {   // 只能爬到可落脚的平台
         if (p.y < h + 30) continue
         const le = p.x1 - 12, re = p.x2 - PW + 12
-        if (Math.abs(x - le) < 30) { climb = { x: le, top: p.y, p }; state = 'climb'; return true }
-        if (Math.abs(x - re) < 30) { climb = { x: re, top: p.y, p }; state = 'climb'; return true }
+        if (Math.abs(x - le) < 30) { climb = { x: le, top: p.y, p }; state = 'climb'; vineTo(p.y, le + 22); return true }
+        if (Math.abs(x - re) < 30) { climb = { x: re, top: p.y, p }; state = 'climb'; vineTo(p.y, re + 22); return true }
       }
       return false
     }
@@ -862,17 +933,17 @@ const ChatPetImpl: FC = () => {
       moving = false
       if (dragging) {
         // carried by pointer: no physics, follow the hand, stay in bounds
-        goal = null; climb = null; vy = 0
+        goal = null; climb = null; vy = 0; vineClear()
         x = Math.max(2, Math.min(floorX - 52, dragX - fr.left - PW / 2))
         h = Math.max(0, floorY - dragY)
       } else if (playerCtl) {
         goal = null
         if (keys.a) { x -= WALK * 1.7 * dt; dir = -1; moving = true }
         if (keys.d) { x += WALK * 1.7 * dt; dir = 1; moving = true }
-        if (moving && state === 'climb') { state = 'air'; vy = 0; climb = null }
+        if (moving && state === 'climb') { state = 'air'; vy = 0; climb = null; vineClear() }
       } else if (mode !== 'idle') {
         goal = null; climb = null
-        if (state === 'climb') state = 'air'
+        if (state === 'climb') { state = 'air'; vineClear() }
       }
       if (!dragging) {
         if (state === 'climb' && climb) {
@@ -884,6 +955,7 @@ const ChatPetImpl: FC = () => {
               h = climb.top; plat = climb.p
               x = Math.max(climb.p.x1 + 2, Math.min(climb.p.x2 - PW - 2, x))
               state = 'ground'; climb = null; goal = null
+              vineClear(); dust(-200)   // 翻上平台：尘 + 藤蔓枯萎
             }
           }
         } else if (state === 'air') {
@@ -891,15 +963,17 @@ const ChatPetImpl: FC = () => {
           const pv = vy
           vy -= G * dt
           if (vy < 0) {
-            for (const p of plats) {
+            // landing: user bubbles + composer ONLY — assistant 气泡永远落不住
+            // （不阻挡文字显示），落空就掉到地板。凭空跳不复存在。
+            for (const p of landings) {
               if (dropP && Math.abs(p.y - dropP.y) < 8) continue
               if (h <= p.y && h + ((pv > 0 ? pv : 0) - vy) * dt + 30 >= p.y && x + PW / 2 > p.x1 - 4 && x + PW / 2 < p.x2 + 4 && p.y > 2) {
-                h = p.y; vy = 0; state = 'ground'; plat = p; goal = null; dropP = null; airJumped = false
+                h = p.y; vy = 0; state = 'ground'; plat = p; goal = null; dropP = null; airJumped = false; dust(pv)   // 落地扬尘
                 break
               }
             }
           }
-          if (h <= 0) { h = 0; vy = 0; state = 'ground'; plat = null; dropP = null; airJumped = false }
+          if (h <= 0) { h = 0; vy = 0; state = 'ground'; plat = null; dropP = null; airJumped = false; dust(pv) }
         } else if (goal) {
           dir = goal.x > x + 2 ? 1 : (goal.x < x - 2 ? -1 : dir)
           if (Math.abs(goal.x - x) > 3) x += WALK * dt * dir
@@ -1066,6 +1140,8 @@ const ChatPetImpl: FC = () => {
       unit.removeEventListener('pointermove', onUnitPointerMove)
       unit.removeEventListener('pointerup', onUnitPointerUp)
       unit.removeEventListener('pointercancel', onUnitPointerUp)
+      vineClear()
+      if (vineEl) { vineEl.remove(); vineEl = null }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [petId])
